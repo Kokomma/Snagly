@@ -1,10 +1,8 @@
 import React, { useContext } from "react";
-import { Image, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { ThemeContext } from "../theme/ThemeProvider";
 import { ThemeToggle } from "../components/ThemeToggle";
-
-const lightLogo = require("../../assets/logo-light.png");
-const darkLogo = require("../../assets/logo-dark.png");
+import { LogoMark } from "../components/LogoMark";
 
 export const HomeScreen = () => {
   const { colorScheme } = useContext(ThemeContext);
@@ -16,11 +14,7 @@ export const HomeScreen = () => {
         <ThemeToggle />
       </View>
       <View className="flex-1 items-center justify-center px-6">
-        <Image
-          source={isDark ? darkLogo : lightLogo}
-          resizeMode="contain"
-          style={{ width: 180, height: 180 }}
-        />
+        <LogoMark scheme={isDark ? "dark" : "light"} size={180} />
         <Text className="mt-6 text-4xl font-extrabold text-black dark:text-white">
           Snagly
         </Text>
