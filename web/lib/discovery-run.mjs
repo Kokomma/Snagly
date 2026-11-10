@@ -11,7 +11,7 @@ export async function runDiscovery({ scheduled = false, revision } = {}) {
   if (
     scheduled &&
     snapshot.lastRun &&
-    Date.now() - Date.parse(snapshot.lastRun) < 50 * 60 * 1000
+    Date.now() - Date.parse(snapshot.lastRun) < 30 * 60 * 1000
   )
     return { skipped: true };
   const expected = snapshot.revision,

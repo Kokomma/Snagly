@@ -1,6 +1,14 @@
 {
   "framework": "nextjs",
   "regions": ["lhr1"],
-  "crons": [{ "path": "/api/cron", "schedule": "0 * * * *" }],
+  "schedules": {
+    "hourly-discovery": {
+      "path": "/api/cron",
+      "schedule": "0 * * * *",
+      "requestMethod": "GET",
+      "timezone": "Africa/Lagos",
+      "jitter": 15
+    }
+  },
   "functions": { "app/api/cron/route.js": { "maxDuration": 60 } }
 }

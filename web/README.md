@@ -59,7 +59,7 @@ Storage uses compressed, chunked personal workspace snapshots under `snaglyOwner
 
 Vercel project: `ellas-projects-75a7ecc5/snagly-personal`. Git repository root directory setting: `web`. The branch `codex/personal-mvp` contains the web MVP; `main` is preserved for review.
 
-Set owner authentication, database credentials and `CRON_SECRET` directly in Vercel's environment settings. Never send secrets in chat. The scheduled route accepts only `Authorization: Bearer <CRON_SECRET>`. The checked-in hourly schedule requires a plan supporting hourly cron; Vercel Hobby rejects hourly cron deployments. Do not silently change the schedule to daily and claim hourly support. An authorized external scheduler can invoke the same protected endpoint if needed.
+Owner authentication, Firebase credentials and `CRON_SECRET` are stored in Vercel's protected environment settings. Never send secrets in chat. The scheduled route accepts only `Authorization: Bearer <CRON_SECRET>`. The checked-in `hourly-discovery` uses Vercel Schedules (not legacy Cron), which supports hourly runs on Hobby with a 15-minute jitter window. Hobby has a shared team allowance of 5,000 schedule runs per billing period; this job uses approximately 720 per month before manual runs. Monitor usage and execution history. Scheduled runs do not guarantee discovery at the exact top of the hour.
 
 In-app notifications are supported. Email/push notifications and generative AI enrichment are not enabled in this MVP. The app starts empty; add your actual profile, preferences and chosen employer boards before expecting personalized results.
 
