@@ -23,8 +23,7 @@ export async function POST(req) {
   if (!setupStatus().auth)
     return Response.json(
       {
-        error:
-          "Sign-in is temporarily unavailable. Please try again shortly.",
+        error: "Sign-in is temporarily unavailable. Please try again shortly.",
       },
       { status: 503 },
     );

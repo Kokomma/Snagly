@@ -1,0 +1,8 @@
+.tooling
+.git
+snagly
+**/node_modules
+**/.next
+**/.data
+**/.env*
+**/*debug.log

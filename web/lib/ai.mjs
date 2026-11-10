@@ -1,5 +1,6 @@
 import { generateText, Output } from "ai";
 import { google } from "@ai-sdk/google";
+import { workspaceIdentity } from "./workspace-context.mjs";
 import { z } from "zod";
 import { transact } from "./store.mjs";
 import { profileHash, now, uid, event } from "./model.mjs";
@@ -47,6 +48,8 @@ export async function tailorWithAI(
   generate = generateText,
   transaction = transact,
 ) {
+  if (transaction === transact && !workspaceIdentity().verified)
+    throw new Error("Verify your email before using AI tailoring.");
   if (
     process.env.GOOGLE_FREE_TIER_CONFIRMED !== "true" ||
     !process.env.GOOGLE_GENERATIVE_AI_API_KEY ||

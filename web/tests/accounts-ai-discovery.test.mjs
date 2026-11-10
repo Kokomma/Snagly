@@ -93,6 +93,9 @@ test("legacy migration preserves original data and clears sending authority", ()
   assert.equal(migrated.applications[0].approval, null);
   assert.equal(hasPersonalWork(migrated), true);
   assert.equal(hasPersonalWork(initialState()), false);
+  const preferencesOnly = initialState();
+  preferencesOnly.preferences.minScore = 80;
+  assert.equal(hasPersonalWork(preferencesOnly), true);
 });
 test("career links recognize providers and reject deceptive or private hosts", () => {
   for (const [url, type, board] of [

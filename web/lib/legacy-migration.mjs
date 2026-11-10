@@ -24,6 +24,14 @@ export function hasPersonalWork(s) {
   return !!(
     s.profile.careerHistory ||
     s.profile.skills ||
+    s.profile.country ||
+    s.profile.cities ||
+    s.profile.passions ||
+    s.profile.applicationDetails ||
+    s.profile.authorizedCountries ||
+    s.profile.categories?.length ||
+    JSON.stringify(s.preferences) !==
+      JSON.stringify(initialState().preferences) ||
     s.jobs.length ||
     s.applications.length ||
     s.sources.length

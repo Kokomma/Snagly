@@ -45,8 +45,9 @@ export function setupStatus() {
     },
     email:
       process.env.ENABLE_SUBMISSIONS === "true" &&
-      !!process.env.RESEND_API_KEY &&
-      !!process.env.APPLICATION_FROM,
+      (!!process.env.CONNECTOR_GMAIL ||
+        !!process.env.CONNECTOR_OUTLOOK ||
+        (!!process.env.RESEND_API_KEY && !!process.env.APPLICATION_FROM)),
   };
 }
 export function firebaseApp() {
