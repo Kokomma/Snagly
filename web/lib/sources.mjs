@@ -1,4 +1,22 @@
 import { clean, category, now, event, notify } from "./model.mjs";
+import { readAshby, readHiringCafe } from "./extra-adapters.mjs";
+import { createHash } from "node:crypto";
+const fingerprint = (j) =>
+  createHash("sha256")
+    .update(
+      JSON.stringify([
+        j.title,
+        j.description,
+        j.location,
+        j.arrangement,
+        j.country,
+        j.city,
+        j.countries,
+        j.url,
+        j.applyUrl,
+      ]),
+    )
+    .digest("hex");
 const safeUrl = (v) => {
   try {
     const u = new URL(v);
@@ -8,6 +26,8 @@ const safeUrl = (v) => {
   }
 };
 export async function readSource(source, fetcher = fetch) {
+  if (source.type === "ashby") return readAshby(source, fetcher);
+  if (source.type === "hiringcafe") return readHiringCafe(source, fetcher);
   const board = encodeURIComponent(source.board);
   const endpoint =
     source.type === "greenhouse"
@@ -37,7 +57,7 @@ export async function readSource(source, fetcher = fetch) {
               ...(j.lists || []).map((x) => `${x.text} ${x.content}`),
               j.additionalPlain,
             ].join(" "),
-      ).slice(0, 12000);
+        ).slice(0, 12000);
       // Never guess a country or remote eligibility from an employer's headquarters.
       const arrangement =
         j.workplaceType === "remote" || /\bremote\b/i.test(location)
@@ -74,8 +94,14 @@ export async function readSource(source, fetcher = fetch) {
     })
     .filter((j) => j.url && j.title);
 }
-export async function discover(s, fetcher = fetch) {
-  const enabled = s.sources.filter((x) => x.enabled),
+export async function discover(
+  s,
+  fetcher = fetch,
+  { skipSourceIds = [] } = {},
+) {
+  const enabled = s.sources.filter(
+      (x) => x.enabled && !skipSourceIds.includes(x.id),
+    ),
     results = await Promise.allSettled(
       enabled.map((x) => readSource(x, fetcher)),
     );
@@ -86,18 +112,26 @@ export async function discover(s, fetcher = fetch) {
     source.checkedAt = now();
     if (result.status === "rejected") {
       source.error = result.reason.message;
+      if (result.reason.retryAfter)
+        source.nextAttemptAt = new Date(
+          Date.now() + result.reason.retryAfter * 1000,
+        ).toISOString();
       event(s, "source-error", `${source.company}: ${source.error}`);
       continue;
     }
     source.error = null;
+    source.lastSuccessAt = now();
     const ids = new Set(result.value.map((j) => j.id));
-    for (const old of s.jobs.filter((j) => j.sourceId === source.id))
-      old.closed = !ids.has(old.id);
+    // Search results are partial, so absence from HiringCafe does not mean a job closed.
+    if (source.type !== "hiringcafe")
+      for (const old of s.jobs.filter((j) => j.sourceId === source.id))
+        old.closed = !ids.has(old.id);
     for (const job of result.value) {
+      job.sourceFingerprint = fingerprint(job);
       const old = s.jobs.find((j) => j.id === job.id);
       if (old) {
         const changed =
-          old.description !== job.description || old.title !== job.title;
+          (old.sourceFingerprint || fingerprint(old)) !== job.sourceFingerprint;
         Object.assign(old, {
           title: job.title,
           description: job.description,
@@ -105,8 +139,17 @@ export async function discover(s, fetcher = fetch) {
           applyUrl: job.applyUrl,
           closed: false,
           lastSeenAt: now(),
+          sourceFingerprint: job.sourceFingerprint,
         });
         if (changed) {
+          Object.assign(old, {
+            location: job.location,
+            arrangement: job.arrangement,
+            country: job.country,
+            city: job.city,
+            countries: job.countries,
+            category: job.category,
+          });
           old.eligibilityConfirmed = null;
           for (const a of s.applications.filter(
             (a) => a.jobId === old.id && !a.submittedAt,

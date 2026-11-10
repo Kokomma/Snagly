@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { researchSources } from "../lib/research-sources.mjs";
 const CATEGORIES = [
   "Finance & Accounting",
   "Data & Analytics",
@@ -689,6 +690,36 @@ export default function Home() {
               )}
               {view === "Discover jobs" && (
                 <>
+                  <section className="panel">
+                    <div className="section-title">
+                      <h2>More places to find your next move</h2>
+                      <Badge>Browse & import</Badge>
+                    </div>
+                    <div className="research-grid">
+                      {researchSources.map((source) => (
+                        <article className="research-card" key={source.name}>
+                          <h3>
+                            {source.name} <span>↗</span>
+                          </h3>
+                          <p>{source.description}</p>
+                          <small>{source.note}</small>
+                          <div className="button-row">
+                            <a
+                              className="button"
+                              href={source.url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Browse {source.name} ↗
+                            </a>
+                            <button onClick={() => setImporting(true)}>
+                              Import a job
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
                   <div className="filter-bar">
                     <input
                       placeholder="Search roles, companies or skills…"
@@ -1207,8 +1238,9 @@ function Settings({ state, setup, act, busy }) {
         <section className="panel form-panel">
           <h2>Company career boards</h2>
           <p className="muted">
-            Public Greenhouse and Lever boards are checked hourly when hosting
-            supports hourly schedules. No job-board login is needed.
+            Greenhouse, Lever and Ashby career boards and your HiringCafe search
+            are checked hourly. HiringCafe uses one saved search per hour, with
+            up to five detailed matches. No job-board login is needed.
           </p>
           {state.sources.map((s) => (
             <div key={s.id} className="source-row">
@@ -1221,6 +1253,8 @@ function Settings({ state, setup, act, busy }) {
                   {s.error ||
                     `${s.count ?? 0} jobs · Checked ${date(s.checkedAt)}`}
                 </small>
+                {s.query && <small>Search: {s.query}</small>}
+                {s.warning && <small>{s.warning}</small>}
               </div>
               <button
                 disabled={busy}
@@ -1249,26 +1283,64 @@ function Settings({ state, setup, act, busy }) {
             <Field label="Source">
               <select
                 value={source.type}
-                onChange={(e) => setSource({ ...source, type: e.target.value })}
+                onChange={(e) => {
+                  const type = e.target.value;
+                  setSource(
+                    type === "hiringcafe"
+                      ? {
+                          type,
+                          company: "HiringCafe search",
+                          board: "hiringcafe",
+                          query:
+                            state.sources.find((s) => s.type === "hiringcafe")
+                              ?.query || "",
+                        }
+                      : { type, company: "", board: "", query: "" },
+                  );
+                }}
               >
                 <option value="greenhouse">Greenhouse</option>
                 <option value="lever">Lever</option>
+                <option value="ashby">Ashby</option>
+                <option value="hiringcafe">HiringCafe</option>
               </select>
             </Field>
-            <Field
-              label="Board identifier"
-              hint="The company part of boards.greenhouse.io/company or jobs.lever.co/company. Enter the identifier, not a URL."
-            >
-              <input
-                value={source.board}
-                pattern="[a-zA-Z0-9_-]+"
-                onChange={(e) =>
-                  setSource({ ...source, board: e.target.value })
-                }
-                required
-              />
-            </Field>
-            <button disabled={busy}>＋ Add career board</button>
+            {source.type === "hiringcafe" ? (
+              <Field
+                label="Your saved job search"
+                hint="Only this search text is sent to HiringCafe, never your CV, contact information or application history. Describe roles, countries, cities and arrangements. One search is allowed per hour, including manual refreshes."
+              >
+                <textarea
+                  rows={5}
+                  maxLength={2000}
+                  required
+                  value={source.query || ""}
+                  onChange={(e) =>
+                    setSource({ ...source, query: e.target.value })
+                  }
+                  placeholder="e.g. Finance and data analyst roles in Nigeria, remote worldwide or onsite in Lagos. Prioritize newly posted jobs."
+                />
+              </Field>
+            ) : (
+              <Field
+                label="Board identifier"
+                hint="The company part of boards.greenhouse.io/company, jobs.lever.co/company or jobs.ashbyhq.com/company. Enter the identifier, not a URL."
+              >
+                <input
+                  value={source.board}
+                  pattern="[a-zA-Z0-9_-]+"
+                  onChange={(e) =>
+                    setSource({ ...source, board: e.target.value })
+                  }
+                  required
+                />
+              </Field>
+            )}
+            <button disabled={busy}>
+              {source.type === "hiringcafe"
+                ? "Save hourly HiringCafe search"
+                : "＋ Add career board"}
+            </button>
           </form>
         </section>
         <section className="panel form-panel setup">
@@ -1316,6 +1388,11 @@ function ImportJob({ act, close }) {
       }}
     >
       <h2>Add an opportunity</h2>
+      <p className="muted">
+        Paste the exact vacancy link and description from a job you found,
+        including HiringCafe or LaborX. Employer eligibility still needs review.
+        These platforms use manual application completion.
+      </p>
       <div className="form-grid">
         {["title", "company", "url"].map((k) => (
           <Field key={k} label={k}>

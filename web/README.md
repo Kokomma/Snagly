@@ -4,7 +4,9 @@ A private Next.js web application alongside the original Expo app in `../snagly`
 
 ## Included
 
-- Greenhouse and Lever public career-board discovery; hourly authenticated scheduled endpoint and manual refresh. Each source has status/error reporting. Imported HTTPS vacancies are also supported.
+- Greenhouse, Lever and Ashby public career-board discovery; hourly authenticated scheduled endpoint and manual refresh. Each source has status/error reporting. Imported HTTPS vacancies are also supported.
+- HiringCafe automated personal discovery through its documented public MCP search and details tools: one owner-configured search per clock hour, at most five job-detail fetches per run, no pagination/bulk crawling, provider rate-limit backoff. Only the saved search criteria are sent, never the CV, contact details or application history. Configure your search in Sources & settings. The first live interface checks returned a public Nigerian data-analyst posting and its complete description. Absent jobs in partial search results are never inferred closed. The service can change or restrict availability; heavy automated use is not supported by its documentation, so the adapter is deliberately bounded.
+- HiringCafe and LaborX research cards with browse-and-import workflows. Platform application forms remain manual. LaborX is not an automated discovery source; its published terms prohibit automated use. Verify original employer conditions and country eligibility for every role.
 - Multiple career categories, All view, arrangement filters, keyword search and newest/match sorting.
 - Separate remote, hybrid and onsite country/city preferences. Blank physical-work country uses residence; blank cities means anywhere in that country. Remote never implies worldwide eligibility.
 - Explicit employer eligibility review with evidence notes. Skill match is declared-skill keyword overlap, not a hiring probability.
@@ -71,6 +73,8 @@ Single owner only. No payments, subscription plans or multi-user administration.
 
 - [Greenhouse Job Board API](https://docs.greenhouse.io/job-board.html)
 - [Lever Postings API](https://github.com/lever/postings-api)
+- [Ashby Job Postings API](https://developers.ashbyhq.com/docs/public-job-posting-api)
+- [HiringCafe documented search interface](https://hiringcafe.com/documentation/hiringcafe-chatgpt-app)
 - [Resend email endpoint](https://resend.com/docs/api-reference/emails/send-email)
 - [Vercel cron plan limits](https://vercel.com/docs/cron-jobs/usage-and-pricing)
 - [Firestore transactions](https://firebase.google.com/docs/firestore/manage-data/transactions)

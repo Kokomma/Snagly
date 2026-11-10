@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { researchSourceFor } from "./research-sources.mjs";
 export const now = () => new Date().toISOString();
 export const uid = () => randomUUID();
 export const clean = (v) =>
@@ -253,6 +254,22 @@ export function autoBlockers(s, a, env = process.env) {
   )
     blockers.push("Salary floor is not confirmed.");
   if (j.closed) blockers.push("Vacancy is no longer listed by the source.");
+  if (j.sourceId) {
+    const source = s.sources.find((x) => x.id === j.sourceId);
+    if (
+      !source ||
+      source.error ||
+      !source.lastSuccessAt ||
+      Date.now() - Date.parse(source.lastSuccessAt) > 2 * 60 * 60 * 1000
+    )
+      blockers.push(
+        "The source needs a successful recent check before sending.",
+      );
+  }
+  if (researchSourceFor(j.url))
+    blockers.push(
+      "This research source supports manual applications only. Complete the application on the original site.",
+    );
   if (a.status !== "approved")
     blockers.push("Application is not approved for submission.");
   const day = new Intl.DateTimeFormat("en-CA", {

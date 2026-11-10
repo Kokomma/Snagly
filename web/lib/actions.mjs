@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { researchSourceFor } from "./research-sources.mjs";
 import {
   uid,
   now,
@@ -56,9 +57,10 @@ export const schema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("source"),
     source: z.object({
-      type: z.enum(["greenhouse", "lever"]),
+      type: z.enum(["greenhouse", "lever", "ashby", "hiringcafe"]),
       board: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/),
       company: short.min(1),
+      query: z.string().trim().max(2000).optional().default(""),
     }),
   }),
   z.object({ action: z.literal("toggle-source"), id: short }),
@@ -215,6 +217,18 @@ export function mutate(s, b) {
       );
       break;
     case "source":
+      if (b.source.type === "hiringcafe") {
+        if (!b.source.query.trim())
+          throw new Error("Enter the job criteria for your HiringCafe search.");
+        const existing = s.sources.find((x) => x.type === "hiringcafe");
+        if (existing) {
+          existing.query = b.source.query;
+          existing.company = b.source.company;
+          existing.enabled = true;
+          event(s, "source", "HiringCafe search updated.");
+          break;
+        }
+      }
       if (s.sources.length >= 12)
         throw new Error("Personal MVP supports up to 12 sources.");
       if (
@@ -242,6 +256,7 @@ export function mutate(s, b) {
         location: [b.job.city, b.job.country].filter(Boolean).join(", "),
         applyUrl: b.job.url,
         sourceId: null,
+        originSite: researchSourceFor(b.job.url),
         discoveredAt: now(),
         eligibilityConfirmed: null,
         closed: false,
