@@ -1,0 +1,10 @@
+node_modules/
+.next/
+.env*
+!.env.example
+.data/
+.vercel/
+
+.vercel
+.env*
+!.env.example
