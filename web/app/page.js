@@ -1,6 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 import { researchSources } from "../lib/research-sources.mjs";
+import BrandLogo from "./components/BrandLogo";
+import AuthPanel from "./components/AuthPanel";
+import AccountPanel from "./components/AccountPanel";
+import ServiceSettings from "./components/ServiceSettings";
 const CATEGORIES = [
   "Finance & Accounting",
   "Data & Analytics",
@@ -44,14 +48,7 @@ const download = (name, text) => {
   URL.revokeObjectURL(url);
 };
 function Mark() {
-  return (
-    <svg width="33" height="34" viewBox="0 0 100 90" aria-hidden="true">
-      <path fill="#6ab0ff" d="M5 10h90L85 27H15z" />
-      <path fill="#2a8fff" d="M15 29h70L76 45H24z" />
-      <path fill="#2ed3e6" d="M25 47h50L66 61H34z" />
-      <path fill="#16c784" d="M35 63h30L50 84z" />
-    </svg>
-  );
+  return <BrandLogo />;
 }
 function Field({ label, children, hint }) {
   return (
@@ -114,8 +111,9 @@ function JobCard({ job, onClick }) {
 export default function Home() {
   const [state, setState] = useState(null),
     [setup, setSetup] = useState(null),
-    [login, setLogin] = useState(false),
-    [password, setPassword] = useState(""),
+    [account, setAccount] = useState(null),
+    [showAuth, setShowAuth] = useState(false),
+    [authMode, setAuthMode] = useState("signin"),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [toast, setToast] = useState(""),
@@ -127,7 +125,9 @@ export default function Home() {
     [cat, setCat] = useState("All"),
     [arr, setArr] = useState("all"),
     [query, setQuery] = useState(""),
-    [sort, setSort] = useState("newest"),
+    [sort, setSort] = useState("match"),
+    [forYou, setForYou] = useState(true),
+    [jobPage, setJobPage] = useState(1),
     [importing, setImporting] = useState(false),
     [track, setTrack] = useState("all");
   async function load() {
@@ -136,12 +136,13 @@ export default function Home() {
         d = await r.json();
       setSetup(d.setup);
       if (r.status === 401) {
-        setLogin(true);
+        setState(null);
+        setAccount(null);
         return;
       }
       if (!r.ok) throw new Error(d.error);
       setState(d.state);
-      setLogin(false);
+      setAccount(d.account || null);
     } catch (e) {
       setError(e.message);
     }
@@ -178,86 +179,26 @@ export default function Home() {
       setBusy(false);
     }
   }
-  async function signIn(e) {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      const r = await fetch("/api/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error);
-      setPassword("");
-      await load();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
   const navigate = (v) => {
     setView(v);
     setSelected(null);
     setError("");
   };
-  if (!state)
+  if (!state || showAuth)
     return (
-      <main className="login">
-        <div className="login-card">
-          <div className="brand">
-            <Mark />
-            snagly<span>personal</span>
-          </div>
-          <span className="eyebrow">YOUR NEXT CHAPTER STARTS HERE</span>
-          <h1>
-            A little momentum.
-            <br />A lot of possibility.
-          </h1>
-          <p>
-            Your private workspace for discovering opportunities and making your
-            next career move.
-          </p>
-          {setup?.auth === false ? (
-            <div className="notice">
-              <h3>Let’s set up your workspace</h3>
-              <p>
-                Configure an owner password of at least 16 characters and a
-                session secret of at least 32 characters. Hosted use also
-                requires a database. See the setup guide in the repository.
-              </p>
-            </div>
-          ) : login ? (
-            <form onSubmit={signIn}>
-              <Field label="Owner password">
-                <input
-                  autoFocus
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </Field>
-              <button className="primary" disabled={busy}>
-                Open my workspace →
-              </button>
-            </form>
-          ) : (
-            <p>Opening your workspace…</p>
-          )}
-          {error && (
-            <p role="alert" className="error">
-              {error}
-            </p>
-          )}
-          <small>
-            Personal MVP · Your applications always start with your permission.
-          </small>
-        </div>
-      </main>
+      <AuthPanel
+        key={authMode}
+        setup={setup}
+        initialMode={authMode}
+        onCancel={state ? () => setShowAuth(false) : undefined}
+        onSignedIn={async () => {
+          setShowAuth(false);
+          setState(null);
+          setSelected(null);
+          setView("Overview");
+          await load();
+        }}
+      />
     );
   const activeJobs = state.jobs.filter((j) => !j.closed),
     pending = state.applications.filter((a) =>
@@ -281,6 +222,10 @@ export default function Home() {
   const jobs = activeJobs
     .filter(
       (j) =>
+        (!forYou ||
+          ((j.match.score > 0 ||
+            state.profile.categories.includes(j.match.category)) &&
+            j.match.location !== "excluded")) &&
         (cat === "All" || j.match.category === cat) &&
         (arr === "all" || j.arrangement === arr) &&
         (!query ||
@@ -300,7 +245,6 @@ export default function Home() {
       <aside className="sidebar">
         <button className="brand" onClick={() => navigate("Overview")}>
           <Mark />
-          snagly
         </button>
         <div className="workspace-label">PERSONAL WORKSPACE</div>
         <nav>
@@ -387,6 +331,42 @@ export default function Home() {
               Local workspace · Data is saved on this computer. Connect a
               database before deploying.
             </div>
+          )}
+          {account?.legacy && (
+            <section className="account-banner">
+              <div>
+                <b>Your original workspace is preserved.</b>
+                <p>
+                  Create an email account, then link this workspace using the
+                  owner password.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setAuthMode("register");
+                  setShowAuth(true);
+                }}
+              >
+                Create my account →
+              </button>
+            </section>
+          )}
+          {account && !account.legacy && !account.verified && (
+            <section className="account-banner">
+              <div>
+                <b>
+                  Welcome, {account.name || "future you"}. Verify your email to
+                  start discovering jobs.
+                </b>
+                <p>
+                  Your profile is private. Check your inbox for the verification
+                  link.
+                </p>
+              </div>
+              <button onClick={() => navigate("Sources & settings")}>
+                Account settings →
+              </button>
+            </section>
           )}
           {notifications && (
             <section className="panel notification-panel">
@@ -499,17 +479,12 @@ export default function Home() {
                         <span>↗</span>
                       </button>
                     </div>
-                    <div className="hero-art" aria-hidden="true">
-                      <div className="orbit o1" />
-                      <div className="orbit o2" />
-                      <div className="art-card ac1">
-                        ✦ <span>A world of possibilities</span>
-                      </div>
-                      <div className="art-card ac2">
-                        ↗ <span>Your next move</span>
-                      </div>
-                      <div className="big-star">✳</div>
-                    </div>
+                    <figure className="hero-photo">
+                      <img
+                        src="/brand/career-hero.png"
+                        alt="A professional preparing her next career move"
+                      />
+                    </figure>
                   </section>
                   <div className="section-title activity-heading">
                     <h2>Your activity at a glance</h2>
@@ -690,36 +665,60 @@ export default function Home() {
               )}
               {view === "Discover jobs" && (
                 <>
-                  <section className="panel">
-                    <div className="section-title">
-                      <h2>More places to find your next move</h2>
-                      <Badge>Browse & import</Badge>
+                  <section className="panel form-panel">
+                    <h2>Opportunities, brought to you</h2>
+                    <p>
+                      Your saved skills and interests guide discovery.
+                      HiringCafe and starter company feeds from Greenhouse,
+                      Lever and Ashby appear below. Add any supported company
+                      career link in Settings.
+                    </p>
+                    <p className="muted">
+                      HiringCafe provides up to five detailed results per hour.
+                      Company feeds refresh hourly. A location marked unknown
+                      needs confirmation.
+                    </p>
+                    <div className="button-row">
+                      <button
+                        disabled={busy}
+                        onClick={() =>
+                          act({ action: "discover" }, "Job feeds refreshed")
+                        }
+                      >
+                        ↻ Refresh job feeds
+                      </button>
+                      <button onClick={() => navigate("Sources & settings")}>
+                        ＋ Add career board
+                      </button>
                     </div>
-                    <div className="research-grid">
-                      {researchSources.map((source) => (
-                        <article className="research-card" key={source.name}>
-                          <h3>
-                            {source.name} <span>↗</span>
-                          </h3>
-                          <p>{source.description}</p>
-                          <small>{source.note}</small>
-                          <div className="button-row">
-                            <a
-                              className="button"
-                              href={source.url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Browse {source.name} ↗
-                            </a>
-                            <button onClick={() => setImporting(true)}>
-                              Import a job
-                            </button>
-                          </div>
-                        </article>
+                    {state.sources
+                      .filter((x) => x.error)
+                      .map((x) => (
+                        <p key={x.id} className="notice">
+                          {x.company}: {x.error}
+                        </p>
                       ))}
-                    </div>
                   </section>
+                  <div className="tabs">
+                    <button
+                      className={forYou ? "selected" : ""}
+                      onClick={() => {
+                        setForYou(true);
+                        setJobPage(1);
+                      }}
+                    >
+                      ✦ For you
+                    </button>
+                    <button
+                      className={!forYou ? "selected" : ""}
+                      onClick={() => {
+                        setForYou(false);
+                        setJobPage(1);
+                      }}
+                    >
+                      All jobs
+                    </button>
+                  </div>
                   <div className="filter-bar">
                     <input
                       placeholder="Search roles, companies or skills…"
@@ -769,7 +768,7 @@ export default function Home() {
                     <ImportJob act={act} close={() => setImporting(false)} />
                   )}
                   <div className="job-grid discover-grid">
-                    {jobs.map((j) => (
+                    {jobs.slice(0, jobPage * 60).map((j) => (
                       <JobCard
                         key={j.id}
                         job={j}
@@ -777,10 +776,15 @@ export default function Home() {
                       />
                     ))}
                   </div>
+                  {jobs.length > jobPage * 60 && (
+                    <button onClick={() => setJobPage((p) => p + 1)}>
+                      Show more opportunities
+                    </button>
+                  )}
                   {!jobs.length && (
                     <Empty title="Your search has room to grow">
-                      Add career boards in Sources & settings, import a vacancy,
-                      or adjust your filters.
+                      Save your career profile to start automatic discovery, or
+                      try All jobs to explore outside your current matches.
                     </Empty>
                   )}
                 </>
@@ -906,13 +910,23 @@ export default function Home() {
                 />
               )}
               {view === "Sources & settings" && (
-                <Settings
-                  key={state.revision}
-                  state={state}
-                  setup={setup}
-                  act={act}
-                  busy={busy}
-                />
+                <>
+                  <AccountPanel
+                    account={account}
+                    reload={load}
+                    onRegister={() => {
+                      setAuthMode("register");
+                      setShowAuth(true);
+                    }}
+                  />
+                  <Settings
+                    key={state.revision}
+                    state={state}
+                    setup={setup}
+                    act={act}
+                    busy={busy}
+                  />
+                </>
               )}
               {view === "Snagly Intel" && <Intel state={state} />}
             </>
@@ -924,7 +938,7 @@ export default function Home() {
             onClick={async () => {
               await fetch("/api/auth", { method: "DELETE" });
               setState(null);
-              setLogin(true);
+              setAccount(null);
             }}
           >
             Sign out
@@ -1027,14 +1041,41 @@ function Profile({ profile, act, busy }) {
           placeholder="Your real experience goes here…"
         />
       </Field>
-      <Field label="Or import a plain-text CV">
+      <Field label="Other interests, passions and transferable skills">
+        <textarea
+          rows={3}
+          value={p.passions || ""}
+          onChange={(e) => set("passions", e.target.value)}
+          placeholder="Other work you enjoy, industries you want to explore, volunteer experience…"
+        />
+      </Field>
+      <Field
+        label="Application answers"
+        hint="Add phone, professional links, education, work authorization by country, sponsorship needs, notice period, salary expectations and availability. Leave sensitive or uncertain answers blank. Employer-specific questions may still need your review."
+      >
+        <textarea
+          rows={6}
+          value={p.applicationDetails || ""}
+          onChange={(e) => set("applicationDetails", e.target.value)}
+        />
+      </Field>
+      <Field label="Upload your CV (PDF, Word or text)">
         <input
           type="file"
-          accept=".txt,text/plain"
+          accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
           onChange={async (e) => {
             const f = e.target.files?.[0];
-            if (f && f.size <= 50000) set("careerHistory", await f.text());
-            else alert("Choose a plain-text file under 50 KB.");
+            if (!f) return;
+            const form = new FormData();
+            form.append("cv", f);
+            try {
+              const r = await fetch("/api/cv", { method: "POST", body: form });
+              const data = await r.json();
+              if (!r.ok) throw new Error(data.error);
+              set("careerHistory", data.text);
+            } catch (error) {
+              alert(error.message);
+            }
           }}
         />
       </Field>
@@ -1074,297 +1115,230 @@ function Profile({ profile, act, busy }) {
 }
 function Settings({ state, setup, act, busy }) {
   const [p, setP] = useState(state.preferences),
-    [source, setSource] = useState({
-      type: "greenhouse",
-      board: "",
-      company: "",
-    });
+    [boardUrl, setBoardUrl] = useState("");
   const set = (k, v) => setP({ ...p, [k]: v });
   return (
-    <div className="settings-grid">
-      <form
-        className="panel form-panel"
-        onSubmit={(e) => {
-          e.preventDefault();
-          act({ action: "preferences", preferences: p }, "Preferences saved");
-        }}
-      >
-        <h2>Your application mode</h2>
-        <p className="muted">
-          Switch whenever you like. Pausing stops future sends; a send already
-          in progress may complete.
-        </p>
-        <div className="mode-options">
-          {[
-            [
-              "review",
-              "Review & Approve",
-              "Prepare first. Send only when you choose.",
-            ],
-            [
-              "auto",
-              "Auto Apply",
-              "Send exact preapproved email packages that pass every rule.",
-            ],
-          ].map(([v, title, desc]) => (
-            <label key={v} className={p.mode === v ? "chosen" : ""}>
-              <input
-                type="radio"
-                name="mode"
-                value={v}
-                checked={p.mode === v}
-                onChange={() => set("mode", v)}
-              />
-              <b>{title}</b>
-              <small>{desc}</small>
-            </label>
-          ))}
-        </div>
-        <div className="form-grid">
-          <Field label="Minimum skill match (%)">
-            <input
-              type="number"
-              min="0"
-              max="100"
-              value={p.minScore}
-              onChange={(e) => set("minScore", Number(e.target.value))}
-            />
-          </Field>
-          <Field label="Maximum submissions per day">
-            <input
-              type="number"
-              min="1"
-              max="20"
-              value={p.dailyLimit}
-              onChange={(e) => set("dailyLimit", Number(e.target.value))}
-            />
-          </Field>
-          <Field
-            label="Minimum monthly salary (USD)"
-            hint="0 means no floor. Unknown salary blocks sending when a floor is set."
-          >
-            <input
-              type="number"
-              min="0"
-              value={p.minSalary}
-              onChange={(e) => set("minSalary", Number(e.target.value))}
-            />
-          </Field>
-        </div>
-        <h2>Where would you like to work?</h2>
-        <p className="muted">
-          Set each arrangement separately. For onsite or hybrid work, leave
-          country blank to use your residence country. Leave cities blank for
-          anywhere in that country.
-        </p>
-        {["remote", "hybrid", "onsite"].map((a) => (
-          <div className="location-pref" key={a}>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={p[a].enabled}
-                onChange={(e) => set(a, { ...p[a], enabled: e.target.checked })}
-              />
-              <b>{a}</b>
-            </label>
-            <div className="form-grid">
-              <Field
-                label={
-                  a === "remote"
-                    ? "Preferred country or Worldwide"
-                    : "Preferred country"
-                }
-              >
+    <>
+      <ServiceSettings state={state} setup={setup} act={act} busy={busy} />
+      <div className="settings-grid">
+        <form
+          className="panel form-panel"
+          onSubmit={(e) => {
+            e.preventDefault();
+            act({ action: "preferences", preferences: p }, "Preferences saved");
+          }}
+        >
+          <h2>Your application mode</h2>
+          <p className="muted">
+            Switch whenever you like. Pausing stops future sends; a send already
+            in progress may complete.
+          </p>
+          <div className="mode-options">
+            {[
+              [
+                "review",
+                "Review & Approve",
+                "Prepare first. Send only when you choose.",
+              ],
+              [
+                "auto",
+                "Auto Apply",
+                "Send exact preapproved email packages that pass every rule.",
+              ],
+            ].map(([v, title, desc]) => (
+              <label key={v} className={p.mode === v ? "chosen" : ""}>
                 <input
-                  value={p[a].country}
-                  onChange={(e) => set(a, { ...p[a], country: e.target.value })}
+                  type="radio"
+                  name="mode"
+                  value={v}
+                  checked={p.mode === v}
+                  onChange={() => set("mode", v)}
                 />
-              </Field>
-              {a !== "remote" && (
-                <Field label="Preferred cities (comma-separated)">
+                <b>{title}</b>
+                <small>{desc}</small>
+              </label>
+            ))}
+          </div>
+          <div className="form-grid">
+            <Field label="Minimum skill match (%)">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={p.minScore}
+                onChange={(e) => set("minScore", Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Maximum submissions per day">
+              <input
+                type="number"
+                min="1"
+                max="20"
+                value={p.dailyLimit}
+                onChange={(e) => set("dailyLimit", Number(e.target.value))}
+              />
+            </Field>
+            <Field
+              label="Minimum monthly salary (USD)"
+              hint="0 means no floor. Unknown salary blocks sending when a floor is set."
+            >
+              <input
+                type="number"
+                min="0"
+                value={p.minSalary}
+                onChange={(e) => set("minSalary", Number(e.target.value))}
+              />
+            </Field>
+          </div>
+          <h2>Where would you like to work?</h2>
+          <p className="muted">
+            Set each arrangement separately. For onsite or hybrid work, leave
+            country blank to use your residence country. Leave cities blank for
+            anywhere in that country.
+          </p>
+          {["remote", "hybrid", "onsite"].map((a) => (
+            <div className="location-pref" key={a}>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={p[a].enabled}
+                  onChange={(e) =>
+                    set(a, { ...p[a], enabled: e.target.checked })
+                  }
+                />
+                <b>{a}</b>
+              </label>
+              <div className="form-grid">
+                <Field
+                  label={
+                    a === "remote"
+                      ? "Preferred country or Worldwide"
+                      : "Preferred country"
+                  }
+                >
                   <input
-                    placeholder="Blank = anywhere in country"
-                    value={p[a].cities}
+                    value={p[a].country}
                     onChange={(e) =>
-                      set(a, { ...p[a], cities: e.target.value })
+                      set(a, { ...p[a], country: e.target.value })
                     }
                   />
                 </Field>
-              )}
-            </div>
-          </div>
-        ))}
-        <label className="check permission">
-          <input
-            type="checkbox"
-            checked={p.submissionsEnabled}
-            onChange={(e) => set("submissionsEnabled", e.target.checked)}
-          />
-          I authorize sending preapproved email applications that meet my rules.
-          Each exact package and recipient must also be approved.
-        </label>
-        {!setup.email && (
-          <p className="notice">
-            Sending is unavailable until the owner configures the email provider
-            and enables submissions on the server.
-          </p>
-        )}
-        <div className="button-row">
-          <button className="primary" disabled={busy}>
-            Save preferences
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              act(
-                {
-                  action: "preferences",
-                  preferences: {
-                    ...state.preferences,
-                    mode: "review",
-                    submissionsEnabled: false,
-                  },
-                },
-                "Automatic sending paused",
-              )
-            }
-          >
-            Pause all sending
-          </button>
-        </div>
-      </form>
-      <div>
-        <section className="panel form-panel">
-          <h2>Company career boards</h2>
-          <p className="muted">
-            Greenhouse, Lever and Ashby career boards and your HiringCafe search
-            are checked hourly. HiringCafe uses one saved search per hour, with
-            up to five detailed matches. No job-board login is needed.
-          </p>
-          {state.sources.map((s) => (
-            <div key={s.id} className="source-row">
-              <div>
-                <b>{s.company}</b>
-                <small>
-                  {s.type} / {s.board} · {s.enabled ? "Active" : "Paused"}
-                </small>
-                <small>
-                  {s.error ||
-                    `${s.count ?? 0} jobs · Checked ${date(s.checkedAt)}`}
-                </small>
-                {s.query && <small>Search: {s.query}</small>}
-                {s.warning && <small>{s.warning}</small>}
+                {a !== "remote" && (
+                  <Field label="Preferred cities (comma-separated)">
+                    <input
+                      placeholder="Blank = anywhere in country"
+                      value={p[a].cities}
+                      onChange={(e) =>
+                        set(a, { ...p[a], cities: e.target.value })
+                      }
+                    />
+                  </Field>
+                )}
               </div>
-              <button
-                disabled={busy}
-                onClick={() => act({ action: "toggle-source", id: s.id })}
-              >
-                {s.enabled ? "Pause" : "Enable"}
-              </button>
             </div>
           ))}
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (await act({ action: "source", source }, "Career board added"))
-                setSource({ type: "greenhouse", board: "", company: "" });
-            }}
-          >
-            <Field label="Company">
-              <input
-                value={source.company}
-                onChange={(e) =>
-                  setSource({ ...source, company: e.target.value })
-                }
-                required
-              />
-            </Field>
-            <Field label="Source">
-              <select
-                value={source.type}
-                onChange={(e) => {
-                  const type = e.target.value;
-                  setSource(
-                    type === "hiringcafe"
-                      ? {
-                          type,
-                          company: "HiringCafe search",
-                          board: "hiringcafe",
-                          query:
-                            state.sources.find((s) => s.type === "hiringcafe")
-                              ?.query || "",
-                        }
-                      : { type, company: "", board: "", query: "" },
-                  );
-                }}
-              >
-                <option value="greenhouse">Greenhouse</option>
-                <option value="lever">Lever</option>
-                <option value="ashby">Ashby</option>
-                <option value="hiringcafe">HiringCafe</option>
-              </select>
-            </Field>
-            {source.type === "hiringcafe" ? (
+          <label className="check permission">
+            <input
+              type="checkbox"
+              checked={p.submissionsEnabled}
+              onChange={(e) => set("submissionsEnabled", e.target.checked)}
+            />
+            I authorize sending preapproved email applications that meet my
+            rules. Each exact package and recipient must also be approved.
+          </label>
+          {!setup.email && (
+            <p className="notice">
+              Sending is unavailable until the app email connection is ready.
+              You can still prepare and review applications.
+            </p>
+          )}
+          <div className="button-row">
+            <button className="primary" disabled={busy}>
+              Save preferences
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                act(
+                  {
+                    action: "preferences",
+                    preferences: {
+                      ...state.preferences,
+                      mode: "review",
+                      submissionsEnabled: false,
+                    },
+                  },
+                  "Automatic sending paused",
+                )
+              }
+            >
+              Pause all sending
+            </button>
+          </div>
+        </form>
+        <div>
+          <section className="panel form-panel">
+            <h2>Company career boards</h2>
+            <p className="muted">
+              Greenhouse, Lever and Ashby career boards and your HiringCafe
+              search are checked hourly. HiringCafe uses one saved search per
+              hour, with up to five detailed matches. No job-board login is
+              needed.
+            </p>
+            {state.sources.map((s) => (
+              <div key={s.id} className="source-row">
+                <div>
+                  <b>{s.company}</b>
+                  <small>
+                    {s.type} / {s.board} · {s.enabled ? "Active" : "Paused"}
+                  </small>
+                  <small>
+                    {s.error ||
+                      `${s.count ?? 0} jobs · Checked ${date(s.checkedAt)}`}
+                  </small>
+                  {s.query && <small>Search: {s.query}</small>}
+                  {s.warning && <small>{s.warning}</small>}
+                </div>
+                <button
+                  disabled={busy}
+                  onClick={() => act({ action: "toggle-source", id: s.id })}
+                >
+                  {s.enabled ? "Pause" : "Enable"}
+                </button>
+              </div>
+            ))}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (
+                  await act(
+                    { action: "source-url", url: boardUrl },
+                    "Career board connected and checked",
+                  )
+                )
+                  setBoardUrl("");
+              }}
+            >
               <Field
-                label="Your saved job search"
-                hint="Only this search text is sent to HiringCafe, never your CV, contact information or application history. Describe roles, countries, cities and arrangements. One search is allowed per hour, including manual refreshes."
-              >
-                <textarea
-                  rows={5}
-                  maxLength={2000}
-                  required
-                  value={source.query || ""}
-                  onChange={(e) =>
-                    setSource({ ...source, query: e.target.value })
-                  }
-                  placeholder="e.g. Finance and data analyst roles in Nigeria, remote worldwide or onsite in Lagos. Prioritize newly posted jobs."
-                />
-              </Field>
-            ) : (
-              <Field
-                label="Board identifier"
-                hint="The company part of boards.greenhouse.io/company, jobs.lever.co/company or jobs.ashbyhq.com/company. Enter the identifier, not a URL."
+                label="Career-board link"
+                hint="Paste a company career page from Greenhouse, Lever or Ashby. Snagly recognizes it and pulls its jobs immediately."
               >
                 <input
-                  value={source.board}
-                  pattern="[a-zA-Z0-9_-]+"
-                  onChange={(e) =>
-                    setSource({ ...source, board: e.target.value })
-                  }
+                  type="url"
                   required
+                  value={boardUrl}
+                  onChange={(e) => setBoardUrl(e.target.value)}
+                  placeholder="https://jobs.ashbyhq.com/company"
+                  maxLength={2000}
                 />
               </Field>
-            )}
-            <button disabled={busy}>
-              {source.type === "hiringcafe"
-                ? "Save hourly HiringCafe search"
-                : "＋ Add career board"}
-            </button>
-          </form>
-        </section>
-        <section className="panel form-panel setup">
-          <h2>Connection status</h2>
-          {[
-            ["Owner sign-in", setup.auth],
-            ["Cloud database", setup.database],
-            ["Scheduled-run secret", setup.cron],
-            ["Email submission", setup.email],
-          ].map(([k, v]) => (
-            <p key={k}>
-              {k}
-              <Badge tone={v ? "green" : "amber"}>
-                {v ? "Configured" : "Setup needed"}
-              </Badge>
-            </p>
-          ))}
-          <p className="muted">
-            Hourly scheduling also depends on your hosting plan. Notifications
-            are delivered inside this workspace.
-          </p>
-        </section>
+              <button disabled={busy}>＋ Connect career board</button>
+            </form>
+          </section>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 function ImportJob({ act, close }) {
@@ -1439,8 +1413,11 @@ function Intel({ state }) {
     [context, setContext] = useState("");
   const j = state.jobs.find((j) => j.id === jobId),
     p = state.profile;
+  const aiMessage = state.applications.find((a) => a.jobId === jobId)?.ai
+    ?.networkingDraft;
   const message = j
-    ? `Hello ${person || "[Name]"},\n\nI came across the ${j.title} opportunity at ${j.company} and would value your perspective on the team.${context ? " " + context : ""}\n\n${p.skills ? "My background includes " + p.skills + ". " : ""}Would you be open to sharing what matters most for someone joining this team?\n\nThank you,\n${p.name || "[Your name]"}`
+    ? aiMessage ||
+      `Hello ${person || "[Name]"},\n\nI came across the ${j.title} opportunity at ${j.company} and would value your perspective on the team.${context ? " " + context : ""}\n\n${p.skills ? "My background includes " + p.skills + ". " : ""}Would you be open to sharing what matters most for someone joining this team?\n\nThank you,\n${p.name || "[Your name]"}`
     : "";
   const [messageDraft, setMessageDraft] = useState(message);
   useEffect(() => {
@@ -1846,6 +1823,27 @@ function JobDetail({ job: j, application: a, act, busy, close }) {
                 </Field>
               </div>
               <div className="form-grid">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    act(
+                      { action: "ai-tailor", id: j.id },
+                      "AI request completed; check the draft or queue status",
+                    )
+                  }
+                >
+                  ✦ Tailor CV & cover letter with AI
+                </button>
+                {a.ai && (
+                  <div className="notice">
+                    <b>AI tailoring saved · review required</b>
+                    <p>{a.ai.matchExplanation}</p>
+                    {a.ai.gaps?.length > 0 && (
+                      <p>Gaps to consider: {a.ai.gaps.join(" · ")}</p>
+                    )}
+                  </div>
+                )}
                 <Field label="Tailored resume">
                   <textarea
                     disabled={locked}
@@ -1994,6 +1992,14 @@ function JobDetail({ job: j, application: a, act, busy, close }) {
         ) : (
           <section className="panel form-panel">
             <h2>Keep the next step clear</h2>
+            <p>
+              The exact CV and cover letter for this application are saved in
+              its Application package tab. Submitted packages are locked so you
+              can revisit them before an interview.
+            </p>
+            <button onClick={() => setTab("Application package")}>
+              View saved CV & cover letter →
+            </button>
             <p>
               Current status: <Badge>{a.status}</Badge>
             </p>

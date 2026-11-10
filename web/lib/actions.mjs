@@ -1,3 +1,4 @@
+import { boardFromUrl, ensureDiscoverySources } from "./board-links.mjs";
 import { z } from "zod";
 import { researchSourceFor } from "./research-sources.mjs";
 import {
@@ -31,6 +32,8 @@ export const schema = z.discriminatedUnion("action", [
       careerHistory: text,
       categories: z.array(z.enum(categories)).max(7),
       authorizedCountries: short,
+      passions: z.string().trim().max(2000).optional().default(""),
+      applicationDetails: z.string().trim().max(8000).optional().default(""),
       timezone: short.refine((v) => {
         try {
           new Intl.DateTimeFormat("en", { timeZone: v });
@@ -93,6 +96,13 @@ export const schema = z.discriminatedUnion("action", [
       salaryMonthlyUsd: z.number().min(0).nullable(),
     }),
   }),
+  z.object({ action: z.literal("source-url"), url: z.string().max(2000) }),
+  z.object({
+    action: z.literal("ai-settings"),
+    enabled: z.boolean(),
+    consent: z.boolean(),
+  }),
+  z.object({ action: z.literal("ai-tailor"), id: short }),
   z.object({ action: z.literal("prepare"), id: short }),
   z.object({
     action: z.literal("draft"),
@@ -198,6 +208,7 @@ export function mutate(s, b) {
     }
     case "profile":
       s.profile = b.profile;
+      ensureDiscoverySources(s);
       for (const a of s.applications) {
         a.approval = null;
         if (a.status === "approved") a.status = "draft";
@@ -216,6 +227,36 @@ export function mutate(s, b) {
         `Preferences saved. ${b.preferences.mode === "auto" ? "Auto Apply" : "Review & Approve"} mode selected.`,
       );
       break;
+    case "ai-settings":
+      if (b.enabled && !b.consent)
+        throw new Error(
+          "Consent to sending career details to the free AI provider is required.",
+        );
+      s.ai = {
+        ...s.ai,
+        enabled: b.enabled,
+        consentAt: b.enabled ? now() : null,
+      };
+      break;
+    case "source-url": {
+      const source = boardFromUrl(b.url);
+      if (source.type === "hiringcafe") {
+        source.automaticQuery = true;
+        source.query = "";
+      }
+      if (
+        s.sources.some(
+          (x) => x.type === source.type && x.board === source.board,
+        )
+      )
+        throw new Error("This career board is already connected.");
+      if (s.sources.length >= 30)
+        throw new Error("Up to 30 career boards can be connected.");
+      s.sources.push({ id: uid(), ...source, enabled: true });
+      ensureDiscoverySources(s);
+      event(s, "source", `Connected ${source.company}.`);
+      break;
+    }
     case "source":
       if (b.source.type === "hiringcafe") {
         if (!b.source.query.trim())
@@ -229,8 +270,8 @@ export function mutate(s, b) {
           break;
         }
       }
-      if (s.sources.length >= 12)
-        throw new Error("Personal MVP supports up to 12 sources.");
+      if (s.sources.length >= 30)
+        throw new Error("Personal MVP supports up to 30 sources.");
       if (
         s.sources.some(
           (x) => x.type === b.source.type && x.board === b.source.board,

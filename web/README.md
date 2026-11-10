@@ -1,80 +1,43 @@
-# Snagly personal MVP
+# Snagly
 
-A private Next.js web application alongside the original Expo app in `../snagly`. The original app and its theme-switcher branch are preserved.
+Next.js career workspace alongside the preserved Expo app. Live: https://snagly-personal.vercel.app. Development branch `codex/personal-mvp`; main is preserved.
 
-## Included
+## Accounts
 
-- Greenhouse, Lever and Ashby public career-board discovery; hourly authenticated scheduled endpoint and manual refresh. Each source has status/error reporting. Imported HTTPS vacancies are also supported.
-- HiringCafe automated personal discovery through its documented public MCP search and details tools: one owner-configured search per clock hour, at most five job-detail fetches per run, no pagination/bulk crawling, provider rate-limit backoff. Only the saved search criteria are sent, never the CV, contact details or application history. Configure your search in Sources & settings. The first live interface checks returned a public Nigerian data-analyst posting and its complete description. Absent jobs in partial search results are never inferred closed. The service can change or restrict availability; heavy automated use is not supported by its documentation, so the adapter is deliberately bounded.
-- HiringCafe and LaborX research cards with browse-and-import workflows. Platform application forms remain manual. LaborX is not an automated discovery source; its published terms prohibit automated use. Verify original employer conditions and country eligibility for every role.
-- Multiple career categories, All view, arrangement filters, keyword search and newest/match sorting.
-- Separate remote, hybrid and onsite country/city preferences. Blank physical-work country uses residence; blank cities means anywhere in that country. Remote never implies worldwide eligibility.
-- Explicit employer eligibility review with evidence notes. Skill match is declared-skill keyword overlap, not a hiring probability.
-- Truthful, extractive resume and letter templates: reorder the career history supplied by the owner and highlight matching declared skills. No invented facts, generative model dependency or hiring-probability claims. Plain-text CV import/export; PDF/DOCX parsing is not included.
-- Networking contact research links and personalized drafts. No fabricated contact identities and no automatic outreach.
-- Switchable Review & Approve / Auto Apply modes. The email channel is the only supported automatic submission adapter. Employer ATS forms are completed manually.
-- Application tracker, notes, CSV export, manual submission recording, follow-up drafts/reminders, activity dashboard and in-app notifications.
+Firebase email/password accounts use HttpOnly, SameSite Strict session cookies. Every request verifies session revocation and current user status. The immutable authenticated UID scopes all storage to `snaglyUsers/{uid}`; client-supplied IDs cannot select another account. Each person has separate profile, preferences, jobs, applications and history. Firestore Rules deny browser access; authenticated server transactions enforce isolation.
 
-## Local development
+Original owner access is `/owner`. Register a fresh account, then visit `/owner/link` with the original owner password. Atomic linking preserves the original `snaglyOwner/workspace` backup, refuses to overwrite an account with career data, clears sending approvals, and blocks further legacy access. Owner migration controls are absent from normal public/account screens.
 
-Use Node 24 LTS. From `web/`:
+Workspace snapshots use gzip chunks up to 650 KB, limited to 40 MB uncompressed / 4 MB compressed. The server identity has datastore access plus scoped Firebase session/user lookup permissions, not project administration. Secrets never enter browser responses or Git.
 
-```powershell
-npm ci
-Copy-Item .env.example .env.local
-# Set your owner password and a random session secret in .env.local.
-npm run dev
-```
+## Discovery and documents
 
-The owner password must have at least 16 characters; the session secret must have at least 32. Never commit either. Without cloud database configuration, development saves to ignored `.data/state.json`. Hosted deployments never fall back to local filesystem storage.
+Verified users save skills, interests, career history, categories, application answers and separate remote/hybrid/onsite country/city preferences. PDF, DOCX and text CV imports are supported. Saving initializes HiringCafe and six checked starter employer feeds from Greenhouse, Lever and Ashby, then runs discovery immediately. For you ranks by skills/categories; All jobs remains available. This is a starter employer selection, not an exhaustive index of every employer on those platforms.
 
-```powershell
-npm test
-npm run build
-# Optional: against a running, blank LOCAL test workspace only:
-node tests/http-smoke.mjs
-```
+Additional supported company career-board URLs are recognized automatically and checked immediately. Arbitrary hosts are rejected without fetching them. Other sites need an adapter or manual import. LaborX remains manual because its terms prohibit automated access. HiringCafe uses the documented MCP interface: one profile-derived search per clock hour, at most five detailed matches, quota reservation and backoff. CV/contact/history are not sent to HiringCafe. Partial search absence never closes earlier jobs.
 
-The HTTP smoke test uses fictional data, checks real API persistence and restores the empty local workspace. It makes no external application submissions. The unit tests inject a fake email provider.
+Location and work eligibility are never guessed. Keyword matching is not a hiring probability. Submitted CV/letter packages are locked and accessible through the tracker for interview preparation. Exports currently use plain text.
 
-## Submission permissions
+## Free-only AI
 
-Sending is OFF by default. Three independent layers must be configured:
+Settings contains explicit consent and enable/pause controls. Gemini connects directly through the Google AI SDK provider, with GOOGLE_GENERATIVE_AI_API_KEY, AI_FREE_MODEL=gemini-3.5-flash-lite and GOOGLE_FREE_TIER_CONFIRMED=true. Project billing was confirmed disabled; a direct synthetic generation succeeded. Do not attach billing to this dedicated project for free-only operation. The unused Gateway budget does not buy credits or participate in application requests.
 
-1. Server: `ENABLE_SUBMISSIONS=true`, `RESEND_API_KEY`, verified `APPLICATION_FROM`.
-2. Workspace: explicit sending permission; Auto Apply mode for scheduled sends.
-3. Application: exact saved resume, letter, subject and verified recipient preapproved for seven days.
+AI produces a tailored CV, letter, fit explanation, gaps and networking draft from career evidence. Free-tier content may be used to improve Google products; users consent first. The provider quota is shared by the app project. HTTP 429 preserves the original package, queues an hourly retry after cooldown, and never falls back to a paid model. Up to two queued drafts are processed per pass; enabled discovery queues new drafts too.
 
-All sends additionally require a complete profile, confirmed employer eligibility, matched location, minimum skill score, confirmed salary floor when configured, an open vacancy and available daily capacity. Changing profile facts, job eligibility or package content invalidates earlier approvals. Mode and rules are checked inside each send reservation.
+Validation checks evidence references and invented numbers, but cannot prove every natural-language claim. Human truth review remains necessary. Profile/job/draft changes block stale results. External generation runs outside retryable transactions.
 
-Reservations are committed before contacting the provider. Concurrent requests cannot send the same application twice. Provider idempotency keys are stable. A crash or uncertain provider result stays locked as `sending` / `uncertain`; do not retry blindly. Inspect the provider using the application ID and reconcile the record before any future attempt. Provider acceptance is recorded as such and does not claim employer review or delivery.
+## Email and Auto Apply
 
-Credentials, application permissions and real recipient addresses are intentionally not preconfigured. Owner-configured email sending should only be used where the employer explicitly accepts email applications. CAPTCHAs, sensitive answers and unsupported forms require manual completion.
+Gmail and Outlook adapters use per-user OAuth through Vercel Connect, bound server-side to Firebase UID. Tokens never enter snapshots or browser responses. Users connect existing mailboxes, without creating email or developer accounts. Snagly's one-time Google/Microsoft OAuth client registrations and connector attachments remain required. Settings shows unavailable connections honestly. Snagly folders/categories and inbox organization are not implemented; inbox reading would need extra consent.
 
-## Hosting
+Set CONNECTOR_GMAIL / CONNECTOR_OUTLOOK after provider registration and project attachment. Google uses openid, email and Gmail send. Microsoft uses openid, email, offline_access, User.Read and Mail.Send; personal Microsoft accounts must be supported. Enable ENABLE_SUBMISSIONS only after real connector checks. Registered accounts cannot fall back to the legacy Resend sender.
 
-Firebase project: `snagly-personal-kokomma`. Firestore database: `snagly`, Enterprise Native mode, London (`europe-west2`), deletion protection enabled. This dedicated database was created with free-tier eligibility. PostgreSQL/Supabase are not used.
+Review & Approve prepares drafts. Auto Apply sends exact preapproved email packages that pass all rules; universal ATS form submission is not supported. Approval binds the saved package/recipient/profile for seven days. Sending additionally checks verified account, connected mailbox/profile email, permission, mode, eligibility, location, score, salary floor, healthy recent source, daily cap and duplicates. Reservations commit before external sending; uncertain outcomes remain locked without automatic retry. Provider acceptance is not proof of delivery or employer review. No real applications/messages were sent in development.
 
-Server-only variables: `FIREBASE_PROJECT_ID`, `FIRESTORE_DATABASE_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON`. The generated service identity has `roles/datastore.user` on the dedicated Snagly project, not project-admin access. Firebase's Admin SDK uses transactions for all updates; network discovery and email delivery run outside retryable transaction callbacks. The browser has no Firebase credential or direct database access. Prototype Firestore Rules deny all client operations. Rules do not constrain Admin SDK access; owner authentication and input validation remain essential.
+## Hosting and validation
 
-Storage uses compressed, chunked personal workspace snapshots under `snaglyOwner/workspace` and its `chunks` subcollection. Each chunk is at most 650 KB; the MVP enforces 40 MB uncompressed / 4 MB compressed workspace limits. This is a single-owner design, not a multi-tenant database model. Direct document transactions preserve atomic approval and submission reservations; no Firestore search queries or pipelines are needed for these keyed snapshot operations.
+Firebase project snagly-personal-kokomma; named Enterprise Native database snagly, London europe-west2, deletion protection enabled. Vercel project ellas-projects-75a7ecc5/snagly-personal, root web, Node 24, lhr1. Protected environment configuration lives in Vercel; .env.example lists names only.
 
-Vercel project: `ellas-projects-75a7ecc5/snagly-personal`. Git repository root directory setting: `web`. The branch `codex/personal-mvp` contains the web MVP; `main` is preserved for review.
+Vercel Schedules runs hourly with Africa/Lagos timezone and 15-minute jitter. The cron route requires its bearer secret, verifies each account, and uses isolated workspace contexts with bounded concurrency. In-app notifications and daily activity are supported; push is not configured.
 
-Owner authentication, Firebase credentials and `CRON_SECRET` are stored in Vercel's protected environment settings. Never send secrets in chat. The scheduled route accepts only `Authorization: Bearer <CRON_SECRET>`. The checked-in `hourly-discovery` uses Vercel Schedules (not legacy Cron), which supports hourly runs on Hobby with a 15-minute jitter window. Hobby has a shared team allowance of 5,000 schedule runs per billing period; this job uses approximately 720 per month before manual runs. Monitor usage and execution history. Scheduled runs do not guarantee discovery at the exact top of the hour.
-
-In-app notifications are supported. Email/push notifications and generative AI enrichment are not enabled in this MVP. The app starts empty; add your actual profile, preferences and chosen employer boards before expecting personalized results.
-
-## Boundaries
-
-Single owner only. No payments, subscription plans or multi-user administration. Sources are public APIs from configured company boards, not an unrestricted web crawler. Source response sizes/timeouts and source count are bounded. Existing application records are retained. Use the provider's own backup facilities for production data.
-
-## Documentation
-
-- [Greenhouse Job Board API](https://docs.greenhouse.io/job-board.html)
-- [Lever Postings API](https://github.com/lever/postings-api)
-- [Ashby Job Postings API](https://developers.ashbyhq.com/docs/public-job-posting-api)
-- [HiringCafe documented search interface](https://hiringcafe.com/documentation/hiringcafe-chatgpt-app)
-- [Resend email endpoint](https://resend.com/docs/api-reference/emails/send-email)
-- [Vercel cron plan limits](https://vercel.com/docs/cron-jobs/usage-and-pricing)
-- [Firestore transactions](https://firebase.google.com/docs/firestore/manage-data/transactions)
+Use npm ci, configure .env.local, then npm run dev. Checks: npm test and npm run build. Local files are .data/users/{uid}.json or legacy .data/state.json; storage requires an authenticated context. Hosted deployments never fall back to local files. Tests use fictional data and injected providers.

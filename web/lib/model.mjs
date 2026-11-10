@@ -225,10 +225,20 @@ export function autoBlockers(s, a, env = process.env) {
     blockers = [];
   if (
     env.ENABLE_SUBMISSIONS !== "true" ||
-    !env.RESEND_API_KEY ||
-    !env.APPLICATION_FROM
+    !(s.emailConnection
+      ? s.emailConnection.provider === "gmail"
+        ? env.CONNECTOR_GMAIL
+        : env.CONNECTOR_OUTLOOK
+      : env.RESEND_API_KEY && env.APPLICATION_FROM)
   )
-    blockers.push("Email submission is not configured by the owner.");
+    blockers.push(
+      "Connect your email in Settings; the app email service must also be activated.",
+    );
+  if (
+    s.emailConnection &&
+    s.emailConnection.email.toLowerCase() !== s.profile.email.toLowerCase()
+  )
+    blockers.push("Your profile email must match your connected mailbox.");
   if (!s.preferences.submissionsEnabled)
     blockers.push("Submission permission is off.");
   if (

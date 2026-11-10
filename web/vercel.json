@@ -10,5 +10,5 @@
       "jitter": 15
     }
   },
-  "functions": { "app/api/cron/route.js": { "maxDuration": 60 } }
+  "functions": { "app/api/cron/route.js": { "maxDuration": 300 } }
 }
