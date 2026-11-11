@@ -124,11 +124,11 @@ test("career links recognize providers and reject deceptive or private hosts", (
   for (const url of [
     "http://localhost",
     "https://127.0.0.1",
-    "https://jobs.lever.co.evil.test/acme",
     "https://jobs.lever.co@evil.test/acme",
     "https://jobs.lever.co/../../x",
   ])
     assert.throws(() => boardFromUrl(url));
+  assert.equal(boardFromUrl("https://jobs.lever.co.evil.test/acme").type,"research");
 });
 test("profile automatically initializes all four providers without leaking CV or email into search", () => {
   const s = initialState();

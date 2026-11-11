@@ -14,6 +14,8 @@ export function boardFromUrl(value) {
     throw new Error("Use a public HTTPS career-board link.");
   const host = u.hostname.toLowerCase(),
     parts = u.pathname.split("/").filter(Boolean);
+  if (!host.includes(".") || host.endsWith(".local") || host.endsWith(".localhost") || host.endsWith(".internal") || host.includes(":") || /^[\d.]+$/.test(host))
+    throw new Error("Use a public job-board website, not a local or IP address.");
   if (host === "jobs.workable.com")
     return { type: "research", board: "workable", company: "Jobs by Workable", url: u.href, note: "Browse Workable and import an individual vacancy with its description. This general search portal does not provide a connected company feed." };
   if (["hiringcafe.com", "www.hiringcafe.com", "hiring.cafe", "www.hiring.cafe"].includes(host))
@@ -30,15 +32,15 @@ export function boardFromUrl(value) {
     "jobs.eu.lever.co": "lever",
     "jobs.ashbyhq.com": "ashby",
     "apply.workable.com": "workable",
+    "jobs.smartrecruiters.com": "smartrecruiters",
+    "careers.smartrecruiters.com": "smartrecruiters",
   };
   let type = providers[host],
     board = parts[0];
   if (host === "boards.greenhouse.io" && parts[0] === "embed")
     board = u.searchParams.get("for");
   if (!type || !board || !/^[a-zA-Z0-9_-]{1,100}$/.test(board))
-    throw new Error(
-      "This site needs its own importer. Connect a company page from Greenhouse, Lever, Ashby or Workable, or add HiringCafe. You can still import an individual vacancy with its description.",
-    );
+    return { type: "research", board: u.href, company: host.replace(/^www\./, ""), url: u.href, note: "Link saved. Automatic importing is not available for this page yet. Browse it and import vacancies into your tracker with their descriptions. Company pages on supported platforms can connect an automatic feed." };
   return { type, board, company: board.replace(/[-_]/g, " "), url: u.href };
 }
 export function profileSearch(profile, preferences) {

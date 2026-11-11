@@ -105,6 +105,41 @@ export async function readWorkable(source, fetcher = fetch) {
     };
   }).filter(j => j.externalId && j.url && j.title);
 }
+export async function readSmartRecruiters(source, fetcher = fetch) {
+  const endpoint = `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(source.board)}/postings`;
+  const read = async url => {
+    const r = await fetcher(url, { signal: AbortSignal.timeout(12000), redirect: "error", cache: "no-store" });
+    if (!r.ok) throw new Error(`SmartRecruiters returned HTTP ${r.status}.`);
+    const raw = await r.text();
+    if (raw.length > 8000000) throw new Error("SmartRecruiters response exceeds size limit.");
+    return JSON.parse(raw);
+  };
+  const data = await read(endpoint + "?limit=100&offset=0&destination=PUBLIC");
+  if (!Array.isArray(data.content)) throw new Error("SmartRecruiters did not return a company job feed.");
+  source.partial = data.totalFound > data.content.length;
+  source.warning = source.partial ? "Showing up to 100 current postings from this company." : null;
+  const jobs = []; let failed = 0;
+  for (let start = 0; start < Math.min(data.content.length,100); start += 8) {
+    const batch = await Promise.allSettled(data.content.slice(start,start+8).map(async item => {
+      if (!/^[a-zA-Z0-9_-]+$/.test(item.id || "")) throw new Error("Invalid posting ID.");
+      const full = await read(endpoint + "/" + encodeURIComponent(item.id));
+      const sections = full.jobAd?.sections || {};
+      const location = full.location || item.location || {};
+      const code = location.country || "";
+      const country = /^[a-zA-Z]{2}$/.test(code) ? new Intl.DisplayNames(["en"], { type: "region" }).of(code.toUpperCase()) : code;
+      const url = https(full.applyUrl) || `https://jobs.smartrecruiters.com/${encodeURIComponent(source.board)}/${encodeURIComponent(item.id)}`;
+      return { ...base(source, { title: full.name || item.name, company: full.company?.name || source.company,
+        description: Object.values(sections).map(s => s.text || "").join("\n"), location: [location.city,country].filter(Boolean).join(", "),
+        workplaceType: location.remote ? "remote" : "unknown" }),
+        id: `smartrecruiters:${source.board}:${item.id}`, externalId: item.id, url, applyUrl: url,
+        country, city: clean(location.city), postedAt: full.releasedDate || item.releasedDate || null };
+    }));
+    for (const result of batch) if (result.status === "fulfilled") jobs.push(result.value); else failed++;
+  }
+  if (failed) { source.partial = true; source.warning = "Some posting details were unavailable; earlier jobs remain saved."; }
+  if (failed && !jobs.length) throw new Error("SmartRecruiters posting details are temporarily unavailable.");
+  return jobs;
+}
 export async function hiringCafeCall(name, args, fetcher = fetch) {
   const r = await fetcher("https://hiringcafe.com/api/chatgpt/mcp", {
     method: "POST",

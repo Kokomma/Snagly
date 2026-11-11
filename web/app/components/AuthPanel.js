@@ -36,6 +36,7 @@ export default function AuthPanel({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ operation: mode, name, email, password }),
+          signal: AbortSignal.timeout(25000),
         }),
         d = await r.json();
       if (!r.ok) throw new Error(d.error || "Sign-in could not be completed.");
@@ -45,9 +46,9 @@ export default function AuthPanel({
       }
       setPassword("");
       setConfirm("");
-      await onSignedIn();
+      await onSignedIn(d.account);
     } catch (e) {
-      setError(e.message);
+      setError(e.name === "TimeoutError" ? "Sign-in is taking too long. Please try again shortly." : e.message);
     } finally {
       setBusy(false);
     }

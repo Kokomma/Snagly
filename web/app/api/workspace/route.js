@@ -9,8 +9,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 export async function GET(req) {
+  let signedIn;
   try {
     return await withRequestWorkspace(req, async (identity) => {
+      signedIn = identity;
       const state = await transact(
         (s) => ({
           ...s,
@@ -32,7 +34,7 @@ export async function GET(req) {
     });
   } catch (e) {
     return Response.json(
-      { error: e.message, setup: setupStatus() },
+      { error: e.message, setup: setupStatus(), account: signedIn || null },
       {
         status: e.message.includes("Sign in") ? 401 : 503,
         headers: { "Cache-Control": "no-store" },

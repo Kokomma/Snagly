@@ -142,7 +142,7 @@ export default function Home() {
     [track, setTrack] = useState("all");
   async function load() {
     try {
-      const r = await fetch("/api/workspace", { cache: "no-store" }),
+      const r = await fetch("/api/workspace", { cache: "no-store", signal: AbortSignal.timeout(25000) }),
         d = await r.json();
       setSetup(d.setup);
       if (r.status === 401) {
@@ -150,16 +150,20 @@ export default function Home() {
         setAccount(null);
         return;
       }
-      if (!r.ok) throw new Error(d.error);
+      if (!r.ok) {
+        if (d.account) setAccount(d.account);
+        throw new Error(d.error);
+      }
       setState(d.state);
       setAccount(d.account || null);
+      setError("");
     } catch (e) {
-      setError(e.message);
+      setError(e.name === "TimeoutError" ? "Your workspace is taking too long to load. Please try again shortly." : e.message);
     }
   }
   useEffect(() => {
     load();
-    const t = setInterval(load, 60000);
+    const t = setInterval(() => { if (document.visibilityState === "visible") load(); }, 300000);
     setDark(localStorage.getItem("snagly-theme") === "dark");
     return () => clearInterval(t);
   }, []);
@@ -194,6 +198,8 @@ export default function Home() {
     setSelected(null);
     setError("");
   };
+  if (!state && account && !showAuth)
+    return <main className="auth-scene"><section className="auth-form-card"><BrandLogo /><h1>You’re signed in</h1><p role="alert">{error || "Loading your workspace…"}</p><button onClick={load}>Try loading workspace again</button><button onClick={async () => { await fetch("/api/auth", { method: "DELETE" }); setAccount(null); setError(""); }}>Sign out</button></section></main>;
   if (!state || showAuth)
     return (
       <AuthPanel
@@ -201,7 +207,8 @@ export default function Home() {
         setup={setup}
         initialMode={authMode}
         onCancel={state ? () => setShowAuth(false) : undefined}
-        onSignedIn={async () => {
+        onSignedIn={async (identity) => {
+          setAccount(identity || null);
           setShowAuth(false);
           setState(null);
           setSelected(null);
@@ -1335,7 +1342,7 @@ function Settings({ state, setup, act, busy }) {
             >
               <Field
                 label="Career-board link"
-                hint="Company career pages from Greenhouse, Lever, Ashby and Workable supply automatic feeds. General search portals such as jobs.workable.com are saved for browsing and importing vacancies."
+                hint="Paste any public job-board link. Snagly connects an automatic feed when supported, or saves a clearly labeled browse-and-import link. Company pages from SmartRecruiters, Greenhouse, Lever, Ashby and Workable can supply feeds."
               >
                 <input
                   type="url"

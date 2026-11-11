@@ -81,7 +81,7 @@ export async function POST(req) {
       else throw new Error("Unsupported sign-in request.");
       const session = await newSession(result.idToken),
         identity = await accountIdentityFromCookie(session);
-      await registerAccount(identity);
+      if (operation === "register") await registerAccount(identity);
       let verificationSent = false;
       if (!identity.verified) {
         try {

@@ -93,6 +93,6 @@ export async function withRequestWorkspace(
     throw new Error(
       "Verify your email before running job discovery or submitting applications.",
     );
-  if (!identity.legacy) await registerAccount(identity);
+  if (!identity.legacy && request.method !== "GET") await registerAccount(identity);
   return withWorkspace(identity, () => fn(identity));
 }

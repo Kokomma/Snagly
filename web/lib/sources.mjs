@@ -1,5 +1,5 @@
 import { clean, category, now, event, notify } from "./model.mjs";
-import { readAshby, readHiringCafe, readWorkable } from "./extra-adapters.mjs";
+import { readAshby, readHiringCafe, readWorkable, readSmartRecruiters } from "./extra-adapters.mjs";
 import { mergeDuplicateJobs } from "./job-dedup.mjs";
 import { createHash } from "node:crypto";
 const fingerprint = (j) =>
@@ -27,6 +27,7 @@ const safeUrl = (v) => {
   }
 };
 export async function readSource(source, fetcher = fetch) {
+  if (source.type === "smartrecruiters") return readSmartRecruiters(source, fetcher);
   if (source.type === "workable") return readWorkable(source, fetcher);
   if (source.type === "research") return [];
   if (source.type === "ashby") return readAshby(source, fetcher);
@@ -126,7 +127,7 @@ export async function discover(
     source.lastSuccessAt = now();
     const ids = new Set(result.value.map((j) => j.id));
     // Search results are partial, so absence from HiringCafe does not mean a job closed.
-    if (source.type !== "hiringcafe")
+    if (source.type !== "hiringcafe" && !source.partial)
       for (const old of s.jobs.filter((j) => j.sourceId === source.id || j.sourceRefs?.some(r => r.sourceId === source.id))) {
         if (old.sourceRefs?.length) {
           for (const ref of old.sourceRefs) if (ref.sourceId === source.id) ref.closed = !ids.has(ref.id);

@@ -14,6 +14,8 @@ import {
   validateUid,
 } from "./workspace-context.mjs";
 import path from "node:path";
+import { databaseError, firestoreClientConfig } from "./database-status.mjs";
+const snapshotCache = new Map(), accountRegistrations = new Map();
 let db,
   queue = Promise.resolve();
 export function setupStatus() {
@@ -66,7 +68,7 @@ export function firestore() {
   if (db) return db;
   const app = firebaseApp();
   db = getFirestore(app, process.env.FIRESTORE_DATABASE_ID || "snagly");
-  db.settings({ preferRest: true });
+  db.settings({ preferRest: false, clientConfig: firestoreClientConfig });
   return db;
 }
 export async function transact(fn, { readOnly = false } = {}) {
@@ -74,6 +76,7 @@ export async function transact(fn, { readOnly = false } = {}) {
   if (setupStatus().database) {
     const database = firestore(),
       root = database.doc(workspaceDocument(identity));
+    if (!readOnly) snapshotCache.delete(root.path);
     return database.runTransaction(
       async (tx) => {
         if (identity.legacy) {
@@ -87,6 +90,9 @@ export async function transact(fn, { readOnly = false } = {}) {
         }
         const meta = await tx.get(root),
           count = meta.exists ? meta.data().chunks || 0 : 0;
+        const cached = snapshotCache.get(root.path);
+        if (readOnly && cached && cached.revision === meta.data()?.revision && cached.expires > Date.now())
+          return fn(structuredClone(cached.state));
         const refs = Array.from({ length: count }, (_, i) =>
           root.collection("chunks").doc(String(i).padStart(3, "0")),
         );
@@ -101,6 +107,10 @@ export async function transact(fn, { readOnly = false } = {}) {
         if (!count && !identity.legacy) {
           state.profile.name = identity.name || "";
           state.profile.email = identity.email || "";
+        }
+        if (readOnly && count) {
+          if (snapshotCache.size >= 20) snapshotCache.delete(snapshotCache.keys().next().value);
+          snapshotCache.set(root.path, { revision: state.revision, expires: Date.now() + 300000, state: structuredClone(state) });
         }
         const result = await fn(state);
         if (!readOnly) {
@@ -125,8 +135,8 @@ export async function transact(fn, { readOnly = false } = {}) {
         }
         return result;
       },
-      { maxAttempts: 5, readOnly },
-    );
+      readOnly ? { readOnly: true } : { maxAttempts: 3 },
+    ).catch(e => { throw databaseError(e); });
   }
   if (process.env.VERCEL)
     throw new Error(
@@ -163,6 +173,9 @@ export async function transact(fn, { readOnly = false } = {}) {
 export async function registerAccount(identity) {
   if (identity.legacy) return;
   validateUid(identity.uid);
+  const registration = JSON.stringify([identity.email, identity.name, identity.verified]);
+  const cached = accountRegistrations.get(identity.uid);
+  if (cached?.registration === registration && cached.expires > Date.now()) return;
   if (setupStatus().database)
     await firestore()
       .doc(workspaceDocument(identity))
@@ -177,6 +190,8 @@ export async function registerAccount(identity) {
         },
         { merge: true },
       );
+  if (accountRegistrations.size >= 1000) accountRegistrations.clear();
+  accountRegistrations.set(identity.uid, { registration, expires: Date.now() + 900000 });
 }
 export async function legacyClaim() {
   if (!setupStatus().database) return null;
