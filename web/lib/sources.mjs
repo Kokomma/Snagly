@@ -1,5 +1,6 @@
 import { clean, category, now, event, notify } from "./model.mjs";
-import { readAshby, readHiringCafe } from "./extra-adapters.mjs";
+import { readAshby, readHiringCafe, readWorkable } from "./extra-adapters.mjs";
+import { mergeDuplicateJobs } from "./job-dedup.mjs";
 import { createHash } from "node:crypto";
 const fingerprint = (j) =>
   createHash("sha256")
@@ -26,6 +27,8 @@ const safeUrl = (v) => {
   }
 };
 export async function readSource(source, fetcher = fetch) {
+  if (source.type === "workable") return readWorkable(source, fetcher);
+  if (source.type === "research") return [];
   if (source.type === "ashby") return readAshby(source, fetcher);
   if (source.type === "hiringcafe") return readHiringCafe(source, fetcher);
   const board = encodeURIComponent(source.board);
@@ -100,7 +103,7 @@ export async function discover(
   { skipSourceIds = [] } = {},
 ) {
   const enabled = s.sources.filter(
-      (x) => x.enabled && !skipSourceIds.includes(x.id),
+      (x) => x.type !== "research" && x.enabled && !skipSourceIds.includes(x.id),
     ),
     results = await Promise.allSettled(
       enabled.map((x) => readSource(x, fetcher)),
@@ -124,11 +127,15 @@ export async function discover(
     const ids = new Set(result.value.map((j) => j.id));
     // Search results are partial, so absence from HiringCafe does not mean a job closed.
     if (source.type !== "hiringcafe")
-      for (const old of s.jobs.filter((j) => j.sourceId === source.id))
-        old.closed = !ids.has(old.id);
+      for (const old of s.jobs.filter((j) => j.sourceId === source.id || j.sourceRefs?.some(r => r.sourceId === source.id))) {
+        if (old.sourceRefs?.length) {
+          for (const ref of old.sourceRefs) if (ref.sourceId === source.id) ref.closed = !ids.has(ref.id);
+          old.closed = old.sourceRefs.every(r => r.closed === true);
+        } else old.closed = !ids.has(old.id);
+      }
     for (const job of result.value) {
       job.sourceFingerprint = fingerprint(job);
-      const old = s.jobs.find((j) => j.id === job.id);
+      const old = s.jobs.find((j) => j.id === job.id || j.sourceRefs?.some(r => r.id === job.id));
       if (old) {
         const changed =
           (old.sourceFingerprint || fingerprint(old)) !== job.sourceFingerprint;
@@ -165,6 +172,7 @@ export async function discover(
     }
     source.count = result.value.length;
   }
+  mergeDuplicateJobs(s);
   s.lastRun = now();
   event(
     s,

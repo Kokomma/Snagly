@@ -28,7 +28,7 @@ export async function POST(req) {
             throw new Error("Use a CV with 40 pages or fewer.");
           text = (await extractText(pdf, { mergePages: true })).text;
         } finally {
-          await pdf.destroy();
+          await pdf.loadingTask.destroy();
         }
       } else if (
         file.name.toLowerCase().endsWith(".docx") &&

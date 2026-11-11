@@ -14,7 +14,9 @@ export function boardFromUrl(value) {
     throw new Error("Use a public HTTPS career-board link.");
   const host = u.hostname.toLowerCase(),
     parts = u.pathname.split("/").filter(Boolean);
-  if (["hiringcafe.com", "www.hiringcafe.com"].includes(host))
+  if (host === "jobs.workable.com")
+    return { type: "research", board: "workable", company: "Jobs by Workable", url: u.href, note: "Browse Workable and import an individual vacancy with its description. This general search portal does not provide a connected company feed." };
+  if (["hiringcafe.com", "www.hiringcafe.com", "hiring.cafe", "www.hiring.cafe"].includes(host))
     return {
       type: "hiringcafe",
       board: "hiringcafe",
@@ -27,6 +29,7 @@ export function boardFromUrl(value) {
     "jobs.lever.co": "lever",
     "jobs.eu.lever.co": "lever",
     "jobs.ashbyhq.com": "ashby",
+    "apply.workable.com": "workable",
   };
   let type = providers[host],
     board = parts[0];
@@ -34,7 +37,7 @@ export function boardFromUrl(value) {
     board = u.searchParams.get("for");
   if (!type || !board || !/^[a-zA-Z0-9_-]{1,100}$/.test(board))
     throw new Error(
-      "This link is not yet supported. Use a company career page on Greenhouse, Lever or Ashby, or HiringCafe. Other sites can be requested without fetching private or unsupported URLs.",
+      "This site needs its own importer. Connect a company page from Greenhouse, Lever, Ashby or Workable, or add HiringCafe. You can still import an individual vacancy with its description.",
     );
   return { type, board, company: board.replace(/[-_]/g, " "), url: u.href };
 }

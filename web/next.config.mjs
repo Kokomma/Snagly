@@ -1,4 +1,6 @@
 export default {
+  serverExternalPackages: ["unpdf", "mammoth"],
+  outputFileTracingIncludes: { "/api/*": ["./assets/fonts/*.ttf"] },
   poweredByHeader: false,
   async headers() {
     return [

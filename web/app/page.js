@@ -5,6 +5,16 @@ import BrandLogo from "./components/BrandLogo";
 import AuthPanel from "./components/AuthPanel";
 import AccountPanel from "./components/AccountPanel";
 import ServiceSettings from "./components/ServiceSettings";
+import { applicationLink } from "../lib/application-link.mjs";
+async function downloadPdf(kind, text) {
+  try {
+    const r = await fetch("/api/documents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, text }) });
+    if (!r.ok) throw new Error((await r.json()).error);
+    const url = URL.createObjectURL(await r.blob());
+    const a = document.createElement("a"); a.href = url; a.download = kind === "resume" ? "Resume.pdf" : "Cover-letter.pdf"; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) { alert(e.message || "PDF download failed. Please try again."); }
+}
 const CATEGORIES = [
   "Finance & Accounting",
   "Data & Analytics",
@@ -1291,7 +1301,7 @@ function Settings({ state, setup, act, busy }) {
                 <div>
                   <b>{s.company}</b>
                   <small>
-                    {s.type} / {s.board} · {s.enabled ? "Active" : "Paused"}
+                    {s.type === "research" ? "Browse & import" : `${s.type} / ${s.board} · ${s.enabled ? "Active" : "Paused"}`}
                   </small>
                   <small>
                     {s.error ||
@@ -1299,10 +1309,13 @@ function Settings({ state, setup, act, busy }) {
                   </small>
                   {s.query && <small>Search: {s.query}</small>}
                   {s.warning && <small>{s.warning}</small>}
+                  {s.note && <small>{s.note}</small>}
+                  {s.type === "research" && <a href={s.url} target="_blank" rel="noreferrer">Browse {s.company} ↗</a>}
                 </div>
                 <button
                   disabled={busy}
                   onClick={() => act({ action: "toggle-source", id: s.id })}
+                  hidden={s.type === "research"}
                 >
                   {s.enabled ? "Pause" : "Enable"}
                 </button>
@@ -1314,7 +1327,7 @@ function Settings({ state, setup, act, busy }) {
                 if (
                   await act(
                     { action: "source-url", url: boardUrl },
-                    "Career board connected and checked",
+                    "Source saved; automatic feeds are checked and browse-only sites are labeled",
                   )
                 )
                   setBoardUrl("");
@@ -1322,7 +1335,7 @@ function Settings({ state, setup, act, busy }) {
             >
               <Field
                 label="Career-board link"
-                hint="Paste a company career page from Greenhouse, Lever or Ashby. Snagly recognizes it and pulls its jobs immediately."
+                hint="Company career pages from Greenhouse, Lever, Ashby and Workable supply automatic feeds. General search portals such as jobs.workable.com are saved for browsing and importing vacancies."
               >
                 <input
                   type="url"
@@ -1504,6 +1517,7 @@ function JobDetail({ job: j, application: a, act, busy, close }) {
       countries: j.countries,
       eligibilityConfirmed: j.eligibilityConfirmed,
       eligibilityNote: j.eligibilityNote || "",
+      employerApplyUrl: j.employerApplyUrl || "",
       salaryMonthlyUsd: j.salaryMonthlyUsd,
     }),
     [draft, setDraft] = useState(
@@ -1659,6 +1673,9 @@ function JobDetail({ job: j, application: a, act, busy, close }) {
           }}
         >
           <h2>Confirm against the original vacancy</h2>
+          <Field label="Direct employer application link (optional)" hint="If a job listing only supplies its aggregator page, you can save the employer link here once. The application button will then open it directly.">
+            <input type="url" value={d.employerApplyUrl} onChange={e => setD({ ...d, employerApplyUrl: e.target.value })} placeholder="https://company.example/careers/job" maxLength={2000} />
+          </Field>
           <p className="muted">
             Source locations often omit countries or remote restrictions. Fill
             these fields from the posting. This also clears any earlier package
@@ -1855,9 +1872,9 @@ function JobDetail({ job: j, application: a, act, busy, close }) {
                   />
                   <button
                     type="button"
-                    onClick={() => download("Resume.txt", draft.resume)}
+                    onClick={() => downloadPdf("resume", draft.resume)}
                   >
-                    Download resume ↓
+                    Download resume PDF ↓
                   </button>
                 </Field>
                 <Field label="Cover letter / application email">
@@ -1871,9 +1888,9 @@ function JobDetail({ job: j, application: a, act, busy, close }) {
                   />
                   <button
                     type="button"
-                    onClick={() => download("Cover-letter.txt", draft.letter)}
+                    onClick={() => downloadPdf("letter", draft.letter)}
                   >
-                    Download letter ↓
+                    Download letter PDF ↓
                   </button>
                 </Field>
               </div>
@@ -1884,7 +1901,9 @@ function JobDetail({ job: j, application: a, act, busy, close }) {
               )}
             </form>
             <section className="panel form-panel">
-              <h2>Approval & submission</h2>
+              <h2>{j.originSite ? "Apply through the job listing" : "Approval & submission"}</h2>
+              {j.originSite && <p>Download your tailored PDF CV and cover letter above, then open the listing and use its employer application link. Snagly cannot submit this website’s form for you. The employer form is where you upload your documents and answer the employer’s questions.</p>}
+              {!j.originSite && <>
               {a.approval ? (
                 <p className="notice">
                   Exact saved package preapproved until{" "}
@@ -1965,13 +1984,16 @@ function JobDetail({ job: j, application: a, act, busy, close }) {
                     Revoke approval
                   </button>
                 )}
+              </div>
+              </>}
+              <div className="button-row">
                 <a
                   className="button"
-                  href={j.applyUrl || j.url}
+                  href={applicationLink(j).url}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Complete employer form ↗
+                  {applicationLink(j).label} ↗
                 </a>
               </div>
               {a.error && <p className="error">{a.error}</p>}

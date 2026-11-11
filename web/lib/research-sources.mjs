@@ -1,5 +1,10 @@
 export const researchSources = [
   {
+    name: "Workable", url: "https://jobs.workable.com/",
+    description: "Browse Workable’s general job search and import a vacancy into your tracker.",
+    note: "Company pages at apply.workable.com can be connected separately as public feeds when available.",
+  },
+  {
     name: "HiringCafe",
     url: "https://hiringcafe.com/",
     description:

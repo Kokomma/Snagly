@@ -1,6 +1,7 @@
 import { boardFromUrl, ensureDiscoverySources } from "./board-links.mjs";
 import { z } from "zod";
 import { researchSourceFor } from "./research-sources.mjs";
+import { mergeDuplicateJobs } from "./job-dedup.mjs";
 import {
   uid,
   now,
@@ -93,6 +94,7 @@ export const schema = z.discriminatedUnion("action", [
       countries: z.array(short).max(30),
       eligibilityConfirmed: z.boolean().nullable(),
       eligibilityNote: short,
+      employerApplyUrl: z.union([z.url().refine(v => v.startsWith("https://") && !new URL(v).username && !new URL(v).password, "Use a public HTTPS employer URL"), z.literal("")]).optional(),
       salaryMonthlyUsd: z.number().min(0).nullable(),
     }),
   }),
@@ -252,7 +254,7 @@ export function mutate(s, b) {
         throw new Error("This career board is already connected.");
       if (s.sources.length >= 30)
         throw new Error("Up to 30 career boards can be connected.");
-      s.sources.push({ id: uid(), ...source, enabled: true });
+      s.sources.push({ id: uid(), ...source, enabled: source.type !== "research" });
       ensureDiscoverySources(s);
       event(s, "source", `Connected ${source.company}.`);
       break;
@@ -302,6 +304,7 @@ export function mutate(s, b) {
         eligibilityConfirmed: null,
         closed: false,
       });
+      mergeDuplicateJobs(s);
       event(s, "discovery", `Imported ${b.job.title} at ${b.job.company}.`);
       break;
     }

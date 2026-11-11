@@ -87,6 +87,24 @@ export async function readAshby(source, fetcher = fetch) {
     })
     .filter((j) => j.url && j.title && j.externalId);
 }
+export async function readWorkable(source, fetcher = fetch) {
+  const r = await fetcher(`https://www.workable.com/api/accounts/${encodeURIComponent(source.board)}?details=true`, {
+    signal: AbortSignal.timeout(15000), cache: "no-store", redirect: "error",
+  });
+  if (!r.ok) throw new Error(`Workable returned HTTP ${r.status}. The company feed may be unavailable; try its employer page.`);
+  const raw = await r.text();
+  if (raw.length > 8000000) throw new Error("Workable response exceeds size limit.");
+  const data = JSON.parse(raw);
+  if (!Array.isArray(data.jobs)) throw new Error("Workable did not return a public company job feed.");
+  return data.jobs.slice(0,1500).map(j => {
+    const url = https(j.application_url || j.shortlink || j.url);
+    return { ...base(source, { ...j, company: data.name || source.company, workplaceType: j.workplace_type === "on_site" ? "onsite" : j.workplace_type || (j.telecommuting ? "remote" : "unknown") }),
+      id: `workable:${source.board}:${j.shortcode || j.code}`, externalId: String(j.shortcode || j.code || ""), url,
+      applyUrl: https(j.url) || url, country: clean(j.country), city: clean(j.city), location: clean([j.city,j.country].filter(Boolean).join(", ")),
+      postedAt: j.published_on || j.created_at || null,
+    };
+  }).filter(j => j.externalId && j.url && j.title);
+}
 export async function hiringCafeCall(name, args, fetcher = fetch) {
   const r = await fetcher("https://hiringcafe.com/api/chatgpt/mcp", {
     method: "POST",

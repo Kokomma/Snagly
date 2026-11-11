@@ -1,5 +1,6 @@
 import { getToken, startAuthorization, revokeToken } from "@vercel/connect";
 import { workspaceIdentity } from "./workspace-context.mjs";
+import { documentPdf } from "./pdf.mjs";
 export function mailboxParams(provider, identity = workspaceIdentity()) {
   if (identity.legacy || !identity.verified)
     throw new Error(
@@ -78,7 +79,7 @@ export async function disconnectMailbox(provider) {
     subject: mailboxParams(provider).subject,
   });
 }
-export function gmailRaw(a, from) {
+export function gmailRaw(a, from, pdf) {
   const safe = (s) => String(s).replace(/[\r\n]/g, "");
   const boundary = "snagly-attachment";
   return Buffer.from(
@@ -96,16 +97,17 @@ export function gmailRaw(a, from) {
       "",
       Buffer.from(a.letter).toString("base64"),
       `--${boundary}`,
-      'Content-Type: text/plain; charset=UTF-8; name="Resume.txt"',
-      'Content-Disposition: attachment; filename="Resume.txt"',
+      pdf ? 'Content-Type: application/pdf; name="Resume.pdf"' : 'Content-Type: text/plain; charset=UTF-8; name="Resume.txt"',
+      pdf ? 'Content-Disposition: attachment; filename="Resume.pdf"' : 'Content-Disposition: attachment; filename="Resume.txt"',
       "Content-Transfer-Encoding: base64",
       "",
-      Buffer.from(a.resume).toString("base64"),
+      (pdf || Buffer.from(a.resume)).toString("base64"),
       `--${boundary}--`,
     ].join("\r\n"),
   ).toString("base64url");
 }
 export async function sendMailbox(a, mailbox, fetcher = fetch) {
+  const pdf = await documentPdf(a.resume, "Resume");
   const gmail = mailbox.provider === "gmail";
   const r = await fetcher(
     gmail
@@ -119,7 +121,7 @@ export async function sendMailbox(a, mailbox, fetcher = fetch) {
       },
       body: JSON.stringify(
         gmail
-          ? { raw: gmailRaw(a, mailbox.email) }
+          ? { raw: gmailRaw(a, mailbox.email, pdf) }
           : {
               message: {
                 subject: a.subject,
@@ -128,9 +130,9 @@ export async function sendMailbox(a, mailbox, fetcher = fetch) {
                 attachments: [
                   {
                     "@odata.type": "#microsoft.graph.fileAttachment",
-                    name: "Resume.txt",
-                    contentType: "text/plain",
-                    contentBytes: Buffer.from(a.resume).toString("base64"),
+                    name: "Resume.pdf",
+                    contentType: "application/pdf",
+                    contentBytes: pdf.toString("base64"),
                   },
                 ],
               },
