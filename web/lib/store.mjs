@@ -109,8 +109,8 @@ export async function transact(fn, { readOnly = false } = {}) {
           state.profile.email = identity.email || "";
         }
         if (readOnly && count) {
-          if (snapshotCache.size >= 20) snapshotCache.delete(snapshotCache.keys().next().value);
-          snapshotCache.set(root.path, { revision: state.revision, expires: Date.now() + 300000, state: structuredClone(state) });
+          if (snapshotCache.size >= 5) snapshotCache.delete(snapshotCache.keys().next().value);
+          snapshotCache.set(root.path, { revision: state.revision, expires: Date.now() + 1800000, state: structuredClone(state) });
         }
         const result = await fn(state);
         if (!readOnly) {

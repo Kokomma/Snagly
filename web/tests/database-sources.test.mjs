@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 import { databaseError, firestoreClientConfig } from "../lib/database-status.mjs";
 import { boardFromUrl } from "../lib/board-links.mjs";
 import { readSmartRecruiters } from "../lib/extra-adapters.mjs";
+import { apiResponse } from "../lib/api-response.mjs";
+test("plain-text hosting failures produce a readable message instead of a JSON parsing error", async () => {
+  await assert.rejects(apiResponse(new Response("An error occurred",{status:504})), /server could not complete/);
+  assert.deepEqual(await apiResponse(Response.json({error:"Database allowance exhausted"},{status:503})),{error:"Database allowance exhausted"});
+});
 test("database quota has a recoverable message and RPC retries do not repeat exhausted quota", () => {
   const error = databaseError(Object.assign(new Error("Quota exceeded"), {code:8}));
   assert.equal(error.status,503);

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import BrandLogo from "./BrandLogo";
+import { apiResponse } from "../../lib/api-response.mjs";
 export default function AuthPanel({
   setup,
   onSignedIn,
@@ -38,7 +39,7 @@ export default function AuthPanel({
           body: JSON.stringify({ operation: mode, name, email, password }),
           signal: AbortSignal.timeout(25000),
         }),
-        d = await r.json();
+        d = await apiResponse(r);
       if (!r.ok) throw new Error(d.error || "Sign-in could not be completed.");
       if (mode === "reset") {
         setMessage(d.message);

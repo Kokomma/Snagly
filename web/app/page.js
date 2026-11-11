@@ -6,6 +6,7 @@ import AuthPanel from "./components/AuthPanel";
 import AccountPanel from "./components/AccountPanel";
 import ServiceSettings from "./components/ServiceSettings";
 import { applicationLink } from "../lib/application-link.mjs";
+import { apiResponse } from "../lib/api-response.mjs";
 async function downloadPdf(kind, text) {
   try {
     const r = await fetch("/api/documents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, text }) });
@@ -143,7 +144,7 @@ export default function Home() {
   async function load() {
     try {
       const r = await fetch("/api/workspace", { cache: "no-store", signal: AbortSignal.timeout(25000) }),
-        d = await r.json();
+        d = await apiResponse(r);
       setSetup(d.setup);
       if (r.status === 401) {
         setState(null);
