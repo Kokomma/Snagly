@@ -37,6 +37,7 @@ export async function connectMailbox(provider) {
     connectorFor(provider),
     mailboxParams(provider),
     {
+      prompt: "select_account",
       callbackUrl:
         (process.env.APP_ORIGIN || "https://snagly-personal.vercel.app") +
         "/api/email/callback",

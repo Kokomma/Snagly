@@ -68,7 +68,10 @@ export async function newSession(idToken) {
   });
 }
 export function cookieHeader(name, value, maxAge = 604800) {
-  return `${name}=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`;
+  // OAuth returns through a top-level cross-site GET. Mutations still require
+  // sameOrigin in withRequestWorkspace; the session remains inaccessible to JS.
+  const sameSite = name === "snagly_account" ? "Lax" : "Strict";
+  return `${name}=${value}; HttpOnly; SameSite=${sameSite}; Path=/; Max-Age=${maxAge}${process.env.NODE_ENV === "production" ? "; Secure" : ""}`;
 }
 export async function sendVerification(idToken) {
   return authApi("sendOobCode", {

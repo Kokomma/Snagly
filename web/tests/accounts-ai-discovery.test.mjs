@@ -11,7 +11,20 @@ import {
 import { transact } from "../lib/store.mjs";
 import { initialState } from "../lib/model.mjs";
 import { migratedState, hasPersonalWork } from "../lib/legacy-migration.mjs";
-import { accountIdentityFromCookie } from "../lib/account-auth.mjs";
+import { accountIdentityFromCookie, cookieHeader } from "../lib/account-auth.mjs";
+import { sameOrigin } from "../lib/auth.mjs";
+test("account session survives OAuth return while cross-site mutations remain rejected", () => {
+  const cookie = cookieHeader("snagly_account", "fixture");
+  assert.match(cookie, /SameSite=Lax/);
+  assert.match(cookie, /HttpOnly/);
+  assert.match(cookieHeader("snagly_session", "fixture"), /SameSite=Strict/);
+  assert.equal(sameOrigin(new Request("https://snagly.example/api/email", {
+    method: "POST", headers: { origin: "https://attacker.example" },
+  })), false);
+  assert.equal(sameOrigin(new Request("https://snagly.example/api/email", {
+    method: "POST", headers: { origin: "https://snagly.example" },
+  })), true);
+});
 import {
   boardFromUrl,
   ensureDiscoverySources,
