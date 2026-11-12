@@ -146,7 +146,7 @@ export default function Home() {
     [track, setTrack] = useState("all");
   async function load() {
     try {
-      const r = await fetch("/api/workspace", { cache: "no-store", signal: AbortSignal.timeout(25000) }),
+      const r = await fetch("/api/workspace", { cache: "no-store", headers: {"X-Snagly-Client":"2"}, signal: AbortSignal.timeout(25000) }),
         d = await apiResponse(r);
       setSetup(d.setup);
       if (r.status === 401) {
@@ -177,7 +177,7 @@ export default function Home() {
   useEffect(() => {
     if (!selected || !state) { setDetails(null); return; }
     const controller=new AbortController(); setDetails(null);
-    fetch(`/api/workspace?jobId=${encodeURIComponent(selected)}`,{cache:"no-store",signal:controller.signal})
+    fetch(`/api/workspace?jobId=${encodeURIComponent(selected)}`,{cache:"no-store",headers:{"X-Snagly-Client":"2"},signal:controller.signal})
       .then(async r=>{const d=await apiResponse(r); if(!r.ok) throw new Error(d.error); return d;})
       .then(d=>setDetails({...d,jobId:selected}))
       .catch(e=>{if(e.name!=="AbortError") setDetails({jobId:selected,error:e.message});});
@@ -205,7 +205,7 @@ export default function Home() {
     try {
       const r = await fetch("/api/workspace", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Snagly-Client":"2" },
         body: JSON.stringify({ ...body, revision: state.revision }),
       });
       const d = await r.json();
@@ -1819,7 +1819,7 @@ function JobDetail({ job: j, application: a, act, busy, close }) {
             <section className="notice">
               <b>Grounded in your experience</b>
               <p>
-                {a.method} Text-file resume export is supported. Finish ATS
+                {a.method} Download PDF copies below. Finish employer
                 forms yourself on the employer site.
               </p>
             </section>

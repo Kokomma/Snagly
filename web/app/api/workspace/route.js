@@ -14,6 +14,7 @@ export async function GET(req) {
   try {
     return await withRequestWorkspace(req, async (identity) => {
       signedIn = identity;
+      if(req.headers.get("x-snagly-client")!=="2") { const e=new Error("Snagly has been updated. Refresh this page to continue with your saved workspace."); e.status=409; throw e; }
       const jobId = new URL(req.url).searchParams.get("jobId");
       if (jobId) {
         const details=await transact(s=>{
@@ -42,6 +43,7 @@ export async function GET(req) {
 export async function POST(req) {
   try {
     return await withRequestWorkspace(req, async (identity) => {
+      if(req.headers.get("x-snagly-client")!=="2") { const e=new Error("Snagly has been updated. Refresh this page before saving changes."); e.status=409; throw e; }
       const raw = await req.text();
       if (raw.length > 100000) throw new Error("Request is too large.");
       const parsed = JSON.parse(raw),
@@ -90,6 +92,6 @@ export async function POST(req) {
       e.name === "ZodError"
         ? "Please check the form fields and required confirmations."
         : e.message;
-    return Response.json({ error: message }, { status: 400 });
+    return Response.json({ error: message }, { status: e.status || 400 });
   }
 }

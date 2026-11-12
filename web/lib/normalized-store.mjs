@@ -15,6 +15,11 @@ function remember(path, digest, value) {
   if (caches.size >= 120) caches.delete(caches.keys().next().value);
   caches.set(path, { digest, value: structuredClone(value), expires: Date.now()+1800000 });
 }
+async function readMany(tx,refs) {
+  const docs=[];
+  for(let i=0;i<refs.length;i+=80) docs.push(...await tx.getAll(...refs.slice(i,i+80)));
+  return docs;
+}
 export function normalizedPlan(state, before = null, oldManifest = {}) {
   const records = [], manifest = {}, pending = [];
   const fresh = Object.keys(oldManifest).length === 0;
@@ -76,7 +81,7 @@ export async function readNormalized(database, tx, root, meta, options={}) {
   if(paths.length!==SHARDS*2+4 || !paths.every(p=>/^(sections\/(profile|core|activity|notifications)|indexes\/(jobs|applications)-[0-7])$/.test(p))) throw new Error("Workspace record manifest is incomplete. Original backups remain preserved.");
   const values=new Map(paths.map(p=>[p,cached(`${base.path}/${p}`,info.manifest[p])]));
   const needed = paths.filter(p=>!values.get(p));
-  const docs = needed.length ? await tx.getAll(...needed.map(p=>database.doc(`${base.path}/${p}`))) : [];
+  const docs = needed.length ? await readMany(tx,needed.map(p=>database.doc(`${base.path}/${p}`))) : [];
   needed.forEach((p,i)=>{const value=decoded(docs[i]);values.set(p,value);remember(`${base.path}/${p}`,info.manifest[p],value);});
   for (const p of paths) {
     const value = values.get(p);
@@ -92,14 +97,14 @@ export async function readNormalized(database, tx, root, meta, options={}) {
   const targets = [...jobs,...apps].filter(x=>x._body);
   const bodyValues=new Map(targets.map(x=>{const p=bodyDoc(database,base,x._body).path;return [p,cached(p,x._body.key)];}));
   const missing = [...new Map(targets.filter(x=>!bodyValues.get(bodyDoc(database,base,x._body).path)).map(x=>[bodyDoc(database,base,x._body).path,x])).values()];
-  const bodies = missing.length ? await tx.getAll(...missing.map(x=>bodyDoc(database,base,x._body))) : [];
+  const bodies = missing.length ? await readMany(tx,missing.map(x=>bodyDoc(database,base,x._body))) : [];
   missing.forEach((x,i)=>{const value=decoded(bodies[i]),p=bodyDoc(database,base,x._body).path;bodyValues.set(p,value);remember(p,x._body.key,value);});
   for (const x of targets) Object.assign(x,bodyValues.get(bodyDoc(database,base,x._body).path));
   return {state,base,manifest:info.manifest};
 }
 export async function stageBodies(database,base,bodies) {
   if (bodies.reduce((n,b)=>n+estimate(b.data,1024),0)>22000) throw new Error("Discovery needs a smaller batch to stay within the free database allowance. Existing records remain intact.");
-  for(let i=0;i<bodies.length;i+=100) { const batch=database.batch(); for(const b of bodies.slice(i,i+100)) batch.set(bodyDoc(database,base,b.ref),b.data); await batch.commit(); }
+  for(let i=0;i<bodies.length;i+=50) { const batch=database.batch(); for(const b of bodies.slice(i,i+50)) batch.set(bodyDoc(database,base,b.ref),b.data); await batch.commit(); }
 }
 export function writeNormalized(database, tx, base, root, meta, state, staged = new Set()) {
   const plan = normalizedPlan(state,null,meta.data().manifest);
@@ -109,28 +114,31 @@ export function writeNormalized(database, tx, base, root, meta, state, staged = 
   }
   for (const r of plan.records) tx.set(database.doc(`${base.path}/${r.path}`),r.data);
   for (const b of bodies) tx.set(bodyDoc(database,base,b.ref),b.data);
-  tx.set(root,{revision:state.revision,manifest:plan.manifest,updatedAt:now(),lastWriteUnitsEstimate:plan.estimatedChangedWriteUnits},{merge:true});
+  tx.set(root,{revision:state.revision,manifest:plan.manifest,updatedAt:now(),lastWriteUnitsEstimate:plan.estimatedChangedWriteUnits+estimate({...meta.data(),manifest:plan.manifest},1024)},{merge:true});
   return plan;
 }
 // Stage immutable records first, then atomically switch the root pointer. Original chunks are retained.
-export async function migrateNormalized(database, root, identity) {
+export async function migrateNormalized(database, root, identity, {onProgress=()=>{}}={}) {
   const original = await root.get();
   if (original.data()?.storageFormat === 2) return {alreadyMigrated:true};
   const count = original.data()?.chunks || 0;
-  const docs = count ? await database.getAll(...Array.from({length:count},(_,i)=>root.collection("chunks").doc(String(i).padStart(3,"0")))) : [];
+  const docs=[];
+  for(let i=0;i<count;i++) docs.push(await root.collection("chunks").doc(String(i).padStart(3,"0")).get());
   const state = count ? unpack(docs.map(d=>{ if (!d.exists) throw new Error("Original workspace backup is incomplete."); return d.data().packed; })) : initialState();
   if (!count && !identity.legacy) { state.profile.name = identity.name || ""; state.profile.email = identity.email || ""; }
   const generation = randomUUID(), base = root.collection("storage").doc(generation);
   const plan = normalizedPlan(state);
+  onProgress({phase:"planned",jobs:state.jobs.length,applications:state.applications.length});
   const staged = [...plan.records.map(r=>({ref:database.doc(`${base.path}/${r.path}`),data:r.data})),...plan.bodies.map(b=>({ref:bodyDoc(database,base,b.ref),data:b.data}))];
   // Refuse oversized one-day migrations rather than exhausting the shared free write allowance.
   if (plan.estimatedChangedWriteUnits > 22000) throw new Error("This workspace needs a staged migration across daily allowances. Your original data is preserved.");
   const reservation=await reserveStorageBudget(database,{reads:Math.max(100,count*160+plan.bodies.length+plan.estimatedIndexReadUnits+20),writes:plan.estimatedChangedWriteUnits+10,kind:"migration"});
   if(!reservation.allowed) throw new Error(reservation.reason);
-  for (let i=0;i<staged.length;i+=100) { const batch=database.batch(); for (const r of staged.slice(i,i+100)) batch.set(r.ref,r.data); await batch.commit(); }
+  for (let i=0;i<staged.length;i+=50) { const batch=database.batch(); for (const r of staged.slice(i,i+50)) batch.set(r.ref,r.data); await batch.commit(); onProgress({phase:"staging",completed:Math.min(i+50,staged.length),total:staged.length}); }
   const stagedMeta={data:()=>({storageGeneration:generation,manifest:plan.manifest,revision:state.revision})};
   const restored=await database.runTransaction(tx=>readNormalized(database,tx,root,stagedMeta,{hydrateAll:true}),{readOnly:true});
   if(stateDigest(state)!==stateDigest(restored.state)) throw new Error("Storage verification failed. Original workspace remains active and unchanged.");
+  onProgress({phase:"verified"});
   await database.runTransaction(async tx=>{
     const current=await tx.get(root);
     if (current.data()?.storageFormat === 2) return;

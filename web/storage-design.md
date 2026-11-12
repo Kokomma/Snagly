@@ -22,6 +22,8 @@ saved package. Opening the overview or another page does not read CV bodies.
 Small metadata sections are cached by account path and content hash for up to
 30 minutes, with a root revision check for each transaction. Immutable bodies can
 also be cached. Writes and sending reservations retain transaction conflict checks.
+Workspace requests identify client storage version 2; older open browser bundles
+receive a refresh message instead of interpreting summary-only packages as blank documents.
 
 ## Safe upgrades
 
