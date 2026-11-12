@@ -91,7 +91,7 @@ export async function readNormalized(database, tx, root, meta, options={}) {
   const jobs = state.jobs.filter(j=>options.hydrateAll || options.hydrateAllJobs || (options.newSkills !== undefined && options.newSkills !== state.profile.skills) || jobIds.has(j.id));
   const targets = [...jobs,...apps].filter(x=>x._body);
   const bodyValues=new Map(targets.map(x=>{const p=bodyDoc(database,base,x._body).path;return [p,cached(p,x._body.key)];}));
-  const missing = targets.filter(x=>!bodyValues.get(bodyDoc(database,base,x._body).path));
+  const missing = [...new Map(targets.filter(x=>!bodyValues.get(bodyDoc(database,base,x._body).path)).map(x=>[bodyDoc(database,base,x._body).path,x])).values()];
   const bodies = missing.length ? await tx.getAll(...missing.map(x=>bodyDoc(database,base,x._body))) : [];
   missing.forEach((x,i)=>{const value=decoded(bodies[i]),p=bodyDoc(database,base,x._body).path;bodyValues.set(p,value);remember(p,x._body.key,value);});
   for (const x of targets) Object.assign(x,bodyValues.get(bodyDoc(database,base,x._body).path));

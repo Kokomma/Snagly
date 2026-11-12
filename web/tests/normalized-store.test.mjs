@@ -69,3 +69,11 @@ test("background reservations stop before consuming allowance reserved for foreg
   const db=new MemoryDB();assert.equal((await reserveStorageBudget(db,{reads:29500,writes:23000})).allowed,true);
   assert.equal((await reserveStorageBudget(db,{reads:1000,writes:2000})).allowed,false);
 });
+test("identical public descriptions hydrate both jobs from a shared immutable body",async()=>{
+  const s=fixture();s.jobs=s.jobs.slice(0,2);s.jobs[1].description=s.jobs[0].description;s.applications=[];
+  const {db,root}=await migrated(s);
+  const full=await db.runTransaction(tx=>readNormalized(db,tx,root,db.snap(root),{hydrateAll:true}));
+  assert.equal(full.state.jobs[0].description,s.jobs[0].description);
+  assert.equal(full.state.jobs[1].description,s.jobs[0].description);
+  assert.equal(full.state.jobs[0]._body.key,full.state.jobs[1]._body.key);
+});
