@@ -7,7 +7,6 @@ import {
 import { getFirestore } from "firebase-admin/firestore";
 import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
 import { initialState, now } from "./model.mjs";
-import { pack, unpack } from "./packing.mjs";
 import {
   workspaceIdentity,
   workspaceDocument,
@@ -15,7 +14,9 @@ import {
 } from "./workspace-context.mjs";
 import path from "node:path";
 import { databaseError, firestoreClientConfig } from "./database-status.mjs";
-const snapshotCache = new Map(), accountRegistrations = new Map();
+import { readNormalized, writeNormalized, migrateNormalized, stageBodies } from "./normalized-store.mjs";
+import { reserveStorageBudget } from "./storage-budget.mjs";
+const accountRegistrations = new Map();
 let db,
   queue = Promise.resolve();
 export function setupStatus() {
@@ -71,13 +72,13 @@ export function firestore() {
   db.settings({ preferRest: false, clientConfig: firestoreClientConfig });
   return db;
 }
-export async function transact(fn, { readOnly = false } = {}) {
+export async function transact(fn, { readOnly = false, ...scope } = {}) {
   const identity = workspaceIdentity();
   if (setupStatus().database) {
     const database = firestore(),
       root = database.doc(workspaceDocument(identity));
-    if (!readOnly) snapshotCache.delete(root.path);
-    return database.runTransaction(
+    const staged=new Set();
+    const run = () => database.runTransaction(
       async (tx) => {
         if (identity.legacy) {
           const claimed = await tx.get(
@@ -88,55 +89,32 @@ export async function transact(fn, { readOnly = false } = {}) {
               "Your workspace is linked to your registered account. Please sign in with your email.",
             );
         }
-        const meta = await tx.get(root),
-          count = meta.exists ? meta.data().chunks || 0 : 0;
-        const cached = snapshotCache.get(root.path);
-        if (readOnly && cached && cached.revision === meta.data()?.revision && cached.expires > Date.now())
-          return fn(structuredClone(cached.state));
-        const refs = Array.from({ length: count }, (_, i) =>
-          root.collection("chunks").doc(String(i).padStart(3, "0")),
-        );
-        const docs = refs.length ? await tx.getAll(...refs) : [];
-        if (docs.some((d) => !d.exists))
-          throw new Error(
-            "Workspace snapshot is incomplete. Restore a verified backup.",
-          );
-        const state = count
-          ? unpack(docs.map((d) => d.data().packed))
-          : initialState();
-        if (!count && !identity.legacy) {
-          state.profile.name = identity.name || "";
-          state.profile.email = identity.email || "";
+        const meta = await tx.get(root);
+        if (meta.data()?.storageFormat !== 2) {
+          const e = new Error("Workspace storage upgrade required."); e.code = "storage_migration"; throw e;
         }
-        if (readOnly && count) {
-          if (snapshotCache.size >= 5) snapshotCache.delete(snapshotCache.keys().next().value);
-          snapshotCache.set(root.path, { revision: state.revision, expires: Date.now() + 1800000, state: structuredClone(state) });
-        }
+        const {state,base} = await readNormalized(database,tx,root,meta,scope);
         const result = await fn(state);
         if (!readOnly) {
           state.revision++;
-          const chunks = pack(state);
-          chunks.forEach((packed, i) =>
-            tx.set(root.collection("chunks").doc(String(i).padStart(3, "0")), {
-              packed,
-            }),
-          );
-          for (let i = chunks.length; i < count; i++) tx.delete(refs[i]);
-          tx.set(
-            root,
-            {
-              revision: state.revision,
-              chunks: chunks.length,
-              encoding: "gzip-json-v1",
-              updatedAt: now(),
-            },
-            { merge: true },
-          );
+          writeNormalized(database,tx,base,root,meta,state,staged);
         }
         return result;
       },
       readOnly ? { readOnly: true } : { maxAttempts: 3 },
-    ).catch(e => { throw databaseError(e); });
+    );
+    const execute=async()=>{
+      for(let attempt=0;attempt<3;attempt++) try { return await run(); } catch(e) {
+        if(e.code==="storage_migration") {
+          if(process.env.STORAGE_V2_MIGRATIONS_ENABLED!=="true") throw new Error("Snagly is upgrading workspace storage. Your data is preserved; please try again shortly.");
+          await migrateNormalized(database,root,identity);
+        }
+        else if(e.code==="storage_stage") { await stageBodies(database,e.base,e.bodies); for(const b of e.bodies) staged.add(b.ref.kind+":"+b.ref.key); }
+        else throw e;
+      }
+      throw new Error("Workspace changed during its storage upgrade. Refresh to retry.");
+    };
+    return execute().catch(e => { throw databaseError(e); });
   }
   if (process.env.VERCEL)
     throw new Error(
@@ -213,4 +191,8 @@ export async function scheduledAccounts() {
   if (!(await legacyClaim()))
     identities.push({ uid: "legacy-owner", legacy: true, verified: true });
   return identities;
+}
+export async function reserveHourlyStorage() {
+  if(!setupStatus().database) return {allowed:true};
+  return reserveStorageBudget(firestore(),{reads:300,writes:600,kind:"hourly-discovery"});
 }

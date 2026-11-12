@@ -50,6 +50,7 @@ export async function tailorWithAI(
 ) {
   if (transaction === transact && !workspaceIdentity().verified)
     throw new Error("Verify your email before using AI tailoring.");
+  if (transaction === transact) transaction = (fn, options = {}) => transact(fn, { ...options, jobIds: [jobId] });
   if (
     process.env.GOOGLE_FREE_TIER_CONFIRMED !== "true" ||
     !process.env.GOOGLE_GENERATIVE_AI_API_KEY ||

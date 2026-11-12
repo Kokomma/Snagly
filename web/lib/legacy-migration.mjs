@@ -2,6 +2,7 @@ import { firestore, setupStatus } from "./store.mjs";
 import { pack, unpack } from "./packing.mjs";
 import { initialState, now, event } from "./model.mjs";
 import { workspaceDocument, validateUid } from "./workspace-context.mjs";
+import { readNormalized } from "./normalized-store.mjs";
 export function migratedState(old, identity) {
   const s = structuredClone(old);
   s.profile.name ||= identity.name || "";
@@ -60,6 +61,7 @@ export async function claimLegacyWorkspace(identity) {
       );
     }
     const read = async (root, meta) => {
+      if (meta.data()?.storageFormat === 2) return (await readNormalized(db,tx,root,meta,{hydrateAll:true})).state;
       const n = meta.exists ? meta.data().chunks || 0 : 0;
       const refs = Array.from({ length: n }, (_, i) =>
         root.collection("chunks").doc(String(i).padStart(3, "0")),
@@ -99,6 +101,7 @@ export async function claimLegacyWorkspace(identity) {
         chunks: chunks.length,
         revision: s.revision,
         encoding: "gzip-json-v1",
+        storageFormat: 1,
         updatedAt: now(),
       },
       { merge: true },

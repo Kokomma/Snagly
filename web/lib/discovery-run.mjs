@@ -39,7 +39,7 @@ export async function runDiscovery({ scheduled = false, revision } = {}) {
       ...new Set([
         ...(snapshot.ai.queue || []),
         ...snapshot.applications
-          .filter((a) => a.status === "draft" && !a.ai)
+          .filter((a) => a.status === "draft" && !a.ai && !a._hasAI)
           .map((a) => a.jobId),
       ]),
     ].slice(0, 100);

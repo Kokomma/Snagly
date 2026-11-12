@@ -428,7 +428,7 @@ export function mutate(s, b) {
 export function backgroundPrepare(s) {
   if (!s.profile.careerHistory || !s.profile.email || !s.profile.name) return;
   const matches = s.jobs
-    .filter((j) => !j.closed && !s.applications.some((a) => a.jobId === j.id))
+    .filter((j) => typeof j.description === "string" && !j.closed && !s.applications.some((a) => a.jobId === j.id))
     .filter((j) => {
       const m = analyze(j, s.profile, s.preferences);
       return (

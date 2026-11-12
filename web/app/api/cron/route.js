@@ -1,7 +1,7 @@
 import { processAIQueue } from "../../../lib/ai.mjs";
 import { withWorkspace } from "../../../lib/workspace-context.mjs";
 import { equal } from "../../../lib/auth.mjs";
-import { transact, scheduledAccounts } from "../../../lib/store.mjs";
+import { transact, scheduledAccounts, reserveHourlyStorage } from "../../../lib/store.mjs";
 import { forEachWorkspace } from "../../../lib/hourly-accounts.mjs";
 import { accountAuth } from "../../../lib/account-auth.mjs";
 import { runDiscovery } from "../../../lib/discovery-run.mjs";
@@ -22,6 +22,8 @@ export async function GET(req) {
   try {
     const identities = await scheduledAccounts();
     const results = await forEachWorkspace(identities, async (identity) => {
+      const budget=await reserveHourlyStorage();
+      if(!budget.allowed) return {skipped:true,reason:budget.reason};
       if (!identity.legacy) {
         const user = await accountAuth().getUser(identity.uid);
         if (user.disabled || !user.emailVerified) return { skipped: true };

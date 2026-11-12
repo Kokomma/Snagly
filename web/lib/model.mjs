@@ -100,8 +100,9 @@ const sameCountry = (a, b) =>
 export function analyze(job, profile, preferences) {
   const text = `${job.title} ${job.description}`,
     skills = terms(profile.skills);
-  const matched = skills.filter((s) => contains(text, s)),
-    missing = skills.filter((s) => !contains(text, s));
+  const known = typeof job.description !== "string" && job._skillProfile === (profile.skills || "") ? job._skillMatches : null;
+  const matched = skills.filter((s) => known ? known.includes(s) : contains(text, s)),
+    missing = skills.filter((s) => !matched.includes(s));
   const pref = preferences[job.arrangement];
   let location = "unknown",
     reasons = [];
@@ -173,7 +174,7 @@ export function analyze(job, profile, preferences) {
     location,
     eligibility: eligible,
     reasons,
-    category: job.category || category(text),
+    category: job.category || job._category || category(text),
     basis:
       "Keyword overlap with your declared skills; not a hiring probability.",
   };
@@ -209,6 +210,7 @@ export function tailor(job, profile) {
   };
 }
 export function packageHash(a) {
+  if (typeof a.resume !== "string" && a._packageHash) return a._packageHash;
   return createHash("sha256")
     .update(
       JSON.stringify([a.jobId, a.recipient, a.resume, a.letter, a.subject]),

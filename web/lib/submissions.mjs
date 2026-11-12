@@ -22,6 +22,7 @@ export async function sendApproved(
       mailbox = await authorizedMailbox(provider);
     }
   }
+  if (transaction === transact) transaction = (fn, options = {}) => transact(fn, { ...options, applicationIds: [id] });
   const snapshot = await transaction((s) => {
     if (revision !== undefined && revision !== s.revision)
       throw new Error("Workspace changed. Refresh and try again.");

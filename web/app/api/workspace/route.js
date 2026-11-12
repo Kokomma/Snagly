@@ -5,6 +5,7 @@ import { analyze, autoBlockers } from "../../../lib/model.mjs";
 import { schema, mutate } from "../../../lib/actions.mjs";
 import { runDiscovery } from "../../../lib/discovery-run.mjs";
 import { sendApproved } from "../../../lib/submissions.mjs";
+import { workspaceSummary } from "../../../lib/workspace-view.mjs";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -13,20 +14,16 @@ export async function GET(req) {
   try {
     return await withRequestWorkspace(req, async (identity) => {
       signedIn = identity;
-      const state = await transact(
-        (s) => ({
-          ...s,
-          jobs: s.jobs.map((j) => ({
-            ...j,
-            match: analyze(j, s.profile, s.preferences),
-          })),
-          applications: s.applications.map((a) => ({
-            ...a,
-            blockers: autoBlockers(s, a),
-          })),
-        }),
-        { readOnly: true },
-      );
+      const jobId = new URL(req.url).searchParams.get("jobId");
+      if (jobId) {
+        const details=await transact(s=>{
+          const job=s.jobs.find(j=>j.id===jobId); if(!job) { const e=new Error("Job missing."); e.status=404; throw e; }
+          const a=s.applications.find(a=>a.jobId===jobId);
+          return {job:{...job,match:analyze(job,s.profile,s.preferences)},application:a?{...a,blockers:autoBlockers(s,a)}:null,revision:s.revision};
+        },{readOnly:true,jobIds:[jobId]});
+        return Response.json(details,{headers:{"Cache-Control":"no-store"}});
+      }
+      const state = await transact(workspaceSummary,{readOnly:true});
       return Response.json(
         { state, setup: setupStatus(), account: identity },
         { headers: { "Cache-Control": "no-store" } },
@@ -36,7 +33,7 @@ export async function GET(req) {
     return Response.json(
       { error: e.message, setup: setupStatus(), account: signedIn || null },
       {
-        status: e.message.includes("Sign in") ? 401 : 503,
+        status: e.status || (e.message.includes("Sign in") ? 401 : 503),
         headers: { "Cache-Control": "no-store" },
       },
     );
@@ -67,7 +64,9 @@ export async function POST(req) {
           if (parsed.revision !== s.revision)
             throw new Error("Workspace changed. Refresh and try again.");
           mutate(s, body);
-        });
+        }, { jobIds: ["prepare","job"].includes(body.action) ? [body.id] : [],
+          applicationIds: body.id && !["prepare","job","toggle-source","followed-up"].includes(body.action) ? [body.id] : [],
+          newSkills: body.action === "profile" ? body.profile.skills : undefined });
       if (
         ["profile", "source-url"].includes(body.action) &&
         identity.verified

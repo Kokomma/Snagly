@@ -130,6 +130,9 @@ export default function Home() {
     [toast, setToast] = useState(""),
     [view, setView] = useState("Overview"),
     [selected, setSelected] = useState(null),
+    [details, setDetails] = useState(null),
+    [jobResults, setJobResults] = useState({jobs:[],total:0,key:""}),
+    [jobsLoading, setJobsLoading] = useState(false),
     [notifications, setNotifications] = useState(false),
     [dark, setDark] = useState(false),
     [range, setRange] = useState(1),
@@ -171,6 +174,31 @@ export default function Home() {
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
   }, [dark]);
+  useEffect(() => {
+    if (!selected || !state) { setDetails(null); return; }
+    const controller=new AbortController(); setDetails(null);
+    fetch(`/api/workspace?jobId=${encodeURIComponent(selected)}`,{cache:"no-store",signal:controller.signal})
+      .then(async r=>{const d=await apiResponse(r); if(!r.ok) throw new Error(d.error); return d;})
+      .then(d=>setDetails({...d,jobId:selected}))
+      .catch(e=>{if(e.name!=="AbortError") setDetails({jobId:selected,error:e.message});});
+    return ()=>controller.abort();
+  }, [selected,state?.revision]);
+  useEffect(()=>{setJobPage(1);},[cat,arr,query,sort,forYou,state?.revision]);
+  useEffect(()=>{
+    if (!state || view!=="Discover jobs") return;
+    const controller=new AbortController(),key=JSON.stringify([cat,arr,query,sort,forYou,state.revision]);
+    const timer=setTimeout(async()=>{
+      setJobsLoading(true);
+      try {
+        const params=new URLSearchParams({page:String(jobPage),category:cat,arrangement:arr,query,sort,personalized:String(forYou)});
+        const r=await fetch(`/api/jobs?${params}`,{cache:"no-store",signal:controller.signal}),d=await apiResponse(r);
+        if(!r.ok) throw new Error(d.error);
+        setJobResults(old=>({ ...d,key,jobs:jobPage>1&&old.key===key ? [...new Map([...old.jobs,...d.jobs].map(j=>[j.id,j])).values()] : d.jobs }));
+      } catch(e) { if(e.name!=="AbortError") setError(e.message); }
+      finally { if(!controller.signal.aborted) setJobsLoading(false); }
+    },200);
+    return ()=>{clearTimeout(timer);controller.abort();};
+  },[view,cat,arr,query,sort,forYou,jobPage,state?.revision]);
   async function act(body, message = "Saved") {
     setBusy(true);
     setError("");
@@ -237,27 +265,9 @@ export default function Home() {
       (a) => a.submittedAt && Date.parse(a.submittedAt) >= cutoff,
     ),
     prepared = activity.filter((e) => e.type === "prepared");
-  const jobs = activeJobs
-    .filter(
-      (j) =>
-        (!forYou ||
-          ((j.match.score > 0 ||
-            state.profile.categories.includes(j.match.category)) &&
-            j.match.location !== "excluded")) &&
-        (cat === "All" || j.match.category === cat) &&
-        (arr === "all" || j.arrangement === arr) &&
-        (!query ||
-          `${j.title} ${j.company} ${j.description}`
-            .toLowerCase()
-            .includes(query.toLowerCase())),
-    )
-    .sort((a, b) =>
-      sort === "match"
-        ? b.match.score - a.match.score
-        : Date.parse(b.discoveredAt) - Date.parse(a.discoveredAt),
-    );
-  const selectedJob = state.jobs.find((j) => j.id === selected),
-    selectedApp = state.applications.find((a) => a.jobId === selected);
+  const jobs = jobResults.jobs;
+  const selectedJob = details?.jobId===selected ? details.job : null,
+    selectedApp = details?.jobId===selected ? details.application : null;
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -411,7 +421,7 @@ export default function Home() {
               )}
             </section>
           )}
-          {selectedJob ? (
+          {selected ? (selectedJob ? (
             <JobDetail
               key={`${selectedJob.id}:${state.revision}`}
               job={selectedJob}
@@ -420,7 +430,7 @@ export default function Home() {
               busy={busy}
               close={() => setSelected(null)}
             />
-          ) : (
+          ) : <section className="panel form-panel"><p role="status">{details?.error || "Loading this vacancy and its saved application…"}</p><button onClick={()=>setSelected(null)}>← Back to workspace</button></section>) : (
             <>
               <div className="page-heading">
                 <div>
@@ -519,7 +529,7 @@ export default function Home() {
                   <div className="stats">
                     {[
                       [
-                        discoveries.length,
+                        state.jobStats?.discovered?.[range] ?? discoveries.length,
                         "Opportunities discovered",
                         "⌕",
                         "blue",
@@ -607,7 +617,7 @@ export default function Home() {
                       <div className="section-title">
                         <h2>
                           Opportunities for you{" "}
-                          <span className="count">{activeJobs.length}</span>
+                          <span className="count">{state.jobStats?.active ?? activeJobs.length}</span>
                         </h2>
                         <button onClick={() => navigate("Discover jobs")}>
                           View all ↗
@@ -739,7 +749,7 @@ export default function Home() {
                   </div>
                   <div className="filter-bar">
                     <input
-                      placeholder="Search roles, companies or skills…"
+                      placeholder="Search roles, companies, locations or your matched skills…"
                       aria-label="Search jobs"
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
@@ -786,7 +796,7 @@ export default function Home() {
                     <ImportJob act={act} close={() => setImporting(false)} />
                   )}
                   <div className="job-grid discover-grid">
-                    {jobs.slice(0, jobPage * 60).map((j) => (
+                    {jobs.map((j) => (
                       <JobCard
                         key={j.id}
                         job={j}
@@ -794,12 +804,13 @@ export default function Home() {
                       />
                     ))}
                   </div>
-                  {jobs.length > jobPage * 60 && (
-                    <button onClick={() => setJobPage((p) => p + 1)}>
+                  {jobsLoading && <p role="status">Loading opportunities…</p>}
+                  {jobs.length < jobResults.total && (
+                    <button disabled={jobsLoading} onClick={() => setJobPage((p) => p + 1)}>
                       Show more opportunities
                     </button>
                   )}
-                  {!jobs.length && (
+                  {!jobsLoading && !jobs.length && (
                     <Empty title="Your search has room to grow">
                       Save your career profile to start automatic discovery, or
                       try All jobs to explore outside your current matches.

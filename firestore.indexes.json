@@ -1,1 +1,1 @@
-{"indexes":[],"fieldOverrides":[{"collectionGroup":"chunks","fieldPath":"packed","indexes":[]}]}
+{"indexes":[],"fieldOverrides":[{"collectionGroup":"chunks","fieldPath":"packed","indexes":[]},{"collectionGroup":"sections","fieldPath":"packed","indexes":[]},{"collectionGroup":"indexes","fieldPath":"packed","indexes":[]},{"collectionGroup":"jobBodies","fieldPath":"packed","indexes":[]},{"collectionGroup":"applicationBodies","fieldPath":"packed","indexes":[]},{"collectionGroup":"snaglyPublicJobBodies","fieldPath":"packed","indexes":[]}]}
