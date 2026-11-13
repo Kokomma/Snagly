@@ -1,0 +1,13 @@
+rules_version = '2';
+// Data model: snaglyOwner/workspace has revision, chunks, encoding, updatedAt.
+// The chunks subcollection stores compressed private snapshots as packed bytes.
+// Only the owner-authenticated server uses these records through scoped IAM.
+// Admin IAM bypasses rules; owner sessions and validation live in the server API.
+// No browser SDK operations or public database queries are allowed.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

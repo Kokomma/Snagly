@@ -1,0 +1,5 @@
+.tooling/
+.env*
+firebase-debug.log
+firestore-debug.log
+.vercel/
